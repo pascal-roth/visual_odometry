@@ -14,3 +14,34 @@
 | Parking garage | [parking](http://rpg.ifi.uzh.ch/docs/teaching/2021/parking.zip) (208.3 MB)                        |
 
 Download and extract to `/datasets`.
+
+
+Vision Algorithm Project
+
+
+1. Bootstrapping 2D <-> 2D point correspondences
+- SIFT Feature Detector and Descriptor
+	- Non- max suppression ? 
+- 5-point / 8-point Algorithm
+	- RANSAC
+	- Heuristic to choose the first two keyframes
+
+2. Continuous VO
+- Feature Detector SIFT
+- Feature Matching
+- P3P / RANSAC
+	- get translation / rotation
+- Heuristic when new landmarks are necessary
+	- find some theory
+	- try simple threshold (20% less feature matches than in the previous image)
+- Bundle Ajdustment / Pose Graph Optimization
+	- decide how often we need to do it? 
+	- matching with previous frames (parallel)
+
+
+3. Bonus Feature
+- Loop Closure via Bundle Adjustmen
+	- current datasets don’t have loops!!
+- alternative: scale drift reduction
+	- need to find some papers describing how to do that
+
