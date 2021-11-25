@@ -1,0 +1,42 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="DuplicatedCode" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <Languages>
+        <language minSize="710" name="Python" />
+      </Languages>
+    </inspection_tool>
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="16">
+            <item index="0" class="java.lang.String" itemvalue="tabulate" />
+            <item index="1" class="java.lang.String" itemvalue="pytest" />
+            <item index="2" class="java.lang.String" itemvalue="ruamel.yaml" />
+            <item index="3" class="java.lang.String" itemvalue="PyHamcrest" />
+            <item index="4" class="java.lang.String" itemvalue="ipython" />
+            <item index="5" class="java.lang.String" itemvalue="ipykernel" />
+            <item index="6" class="java.lang.String" itemvalue="sphinx-pyreverse" />
+            <item index="7" class="java.lang.String" itemvalue="termcolor" />
+            <item index="8" class="java.lang.String" itemvalue="autologging" />
+            <item index="9" class="java.lang.String" itemvalue="future" />
+            <item index="10" class="java.lang.String" itemvalue="pylint" />
+            <item index="11" class="java.lang.String" itemvalue="mock" />
+            <item index="12" class="java.lang.String" itemvalue="pytest-mpl" />
+            <item index="13" class="java.lang.String" itemvalue="gitpython" />
+            <item index="14" class="java.lang.String" itemvalue="deap" />
+            <item index="15" class="java.lang.String" itemvalue="pandas" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8NamingInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="N803" />
+          <option value="N806" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
