@@ -1,16 +1,18 @@
-# import packages
 import enum
 import numpy as np
 import cv2 as cv
 import matplotlib.pyplot as plt
 from typing import Callable
 
+
 # CV Tutorial
 # https://docs.opencv.org/3.4/dc/dc3/tutorial_py_matcher.html
 
 
 class MatcherType(enum.Enum):
+    # brute force matching
     BF = 0,
+    # Fast KNN matching
     FLANN = 1,
 
 
@@ -33,7 +35,7 @@ class FeatureMatcher:
         self.nbr_search = nbr_search
         self.matching_threshold = matching_threshold
 
-        # get machter
+        # get matcher
         self.matcher: Callable
         self.matcher_type = matcher_type
         self.get_matcher()
@@ -47,27 +49,24 @@ class FeatureMatcher:
             search_params = dict(checks=self.nbr_search)
             self.matcher = cv.FlannBasedMatcher(index_params, search_params)
 
-    def match_des(self, des1: np.ndarray, des2: np.ndarray, filter: bool = True):
+    def match_descriptors(self, des1: np.ndarray, des2: np.ndarray, filter: bool = True):
         """
-        :param filter:  if True, only the "good" matches are returned
         :param des1:    Descriptors of image 1 / point cloud
         :param des2:    Descriptors of image 2
+        :param filter:  if True, only the "good" matches are returned
         """
         matches = self.matcher.knnMatch(des1, des2, k=self.k)
         if filter:
             matches = self.match_filter(matches)
 
         # only return first column, second closest match only needed for filter operation
-        return matches[:, 0]
+        return [match[0] for match in matches]
 
-    def match_filter(self, matches) -> np.ndarray:
-        matchesMask = np.zeros(len(matches))
-        # ratio test as per Lowe's paper
-        for i, (m, n) in enumerate(matches):
-            if m.distance < self.matching_threshold * n.distance:
-                matchesMask[i] = 1
-        matches = np.array(matches)
-        return matches[matchesMask == 1]
+    def match_filter(self, matches):
+        # ratio test from Lowe's paper: Distinctive Image Features from Scale-Invariant Keypoints
+        # https://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf
+        return (match for match in matches if
+                match[0].distance < self.matching_threshold * match[1].distance)
 
     @staticmethod
     def match_plotter(img1, kp1, img2, kp2, matches):
