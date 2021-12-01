@@ -66,7 +66,7 @@ class DatasetLoader:
 
     @staticmethod
     def _load_kitti_frames(path: str, K: np.ndarray) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
-        frame_path = os.path.join(path, "00", "image_0")
+        frame_path = os.path.join(path, "05", "image_0")
         frame_paths = sorted([os.path.join(frame_path, f) for f in os.listdir(frame_path) if
                               os.path.isfile(os.path.join(frame_path, f)) and f.endswith(".png")])
         for p in frame_paths:
