@@ -5,6 +5,9 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 from typing import Callable
 
+# CV Tutorial
+# https://docs.opencv.org/3.4/dc/dc3/tutorial_py_matcher.html
+
 
 class MatcherType(enum.Enum):
     BF = 0,
@@ -54,7 +57,8 @@ class FeatureMatcher:
         if filter:
             matches = self.match_filter(matches)
 
-        return matches
+        # only return first column, second closest match only needed for filter operation
+        return matches[:, 0]
 
     def match_filter(self, matches) -> np.ndarray:
         matchesMask = np.zeros(len(matches))
