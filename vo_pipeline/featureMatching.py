@@ -15,17 +15,20 @@ class FeatureMatcher:
     def __init__(self, matcher_type: MatcherType,
                  k: int = 2,
                  nbr_tress: int = 5,
-                 nbr_search: int = 50):
+                 nbr_search: int = 50,
+                 matching_threshold: float = 0.8):
         """
-        :param matcher_type:    matcher algorithm used
-        :param k:               Number of Nearest Neighbors
-        :param nbr_tress:       number of trees
-        :param nbr_search:      number of times the trees are recursively traversed, i.e. higher values = higher precision
+        :param matcher_type:        matcher algorithm used
+        :param k:                   Number of Nearest Neighbors
+        :param nbr_tress:           number of trees
+        :param nbr_search:          number of times trees are recursively traversed, higher values = higher precision
+        :param matching_threshold   discard all matches where first and second match are too close together
         """
         # save parameters
         self.k = k
         self.nbr_tress = nbr_tress
         self.nbr_search = nbr_search
+        self.matching_threshold = matching_threshold
 
         # get machter
         self.matcher: Callable
@@ -57,7 +60,7 @@ class FeatureMatcher:
         matchesMask = np.zeros(len(matches))
         # ratio test as per Lowe's paper
         for i, (m, n) in enumerate(matches):
-            if m.distance < 0.7 * n.distance:
+            if m.distance < self.matching_threshold * n.distance:
                 matchesMask[i] = 1
         matches = np.array(matches)
         return matches[matchesMask == 1]
