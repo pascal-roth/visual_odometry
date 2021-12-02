@@ -34,7 +34,6 @@ class BootstrapInitializer:
     #             uncertainty = BootstrapInitializer.get_baseline_uncertainty(T, point_cloud)
     #             print(uncertainty)
 
-
     @staticmethod
     def get_baseline_uncertainty(T: np.ndarray, point_cloud: np.ndarray) -> float:
         depths = point_cloud[:, 2]
@@ -56,9 +55,9 @@ class BootstrapInitializer:
         W = np.array([[0, -1, 0],
                       [1, 0, 0],
                       [0, 0, 1]])
-        U, _, V = np.linalg.svd(E)
-        R1 = U @ W @ V.T
-        R2 = U @ W.T @ V.T
+        U, _, VT = np.linalg.svd(E)
+        R1 = U @ W @ VT
+        R2 = U @ W.T @ VT
         u = U[:, -1]
         if np.linalg.det(R1) < 0:
             R1 = -R1
@@ -94,21 +93,20 @@ class BootstrapInitializer:
         return T, point_cloud
 
     @staticmethod
-    def _linear_triangulation(pts1: np.ndarray, pts2: np.ndarray, M1: np.ndarray, M2: np.ndarray,
-                              homoeneous=True) -> np.ndarray:
+    def _linear_triangulation(pts1: np.ndarray, pts2: np.ndarray, M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
         assert pts1.shape == pts2.shape, "The number of matched points in both images has to be the same"
         assert M1.shape == M2.shape == (3, 4), "Homogeneous projection matrices have be of shape (3,4)"
         n_pts, _ = pts1.shape
         P = np.zeros((n_pts, 4))
         for i in range(n_pts):
-            A1 = skew(np.array([pts1[i, 0], pts1[i, 1], 1])) @ M1
-            A2 = skew(np.array([pts2[i, 0], pts2[i, 1], 1])) @ M2
+            A1 = skew(pts1[i, :]) @ M1
+            A2 = skew(pts2[i, :]) @ M2
             A = np.vstack((A1, A2))
-            _, _, V = np.linalg.svd(A, full_matrices=False)
-            P[i, :] = V[:, -1]
+            _, _, VT = np.linalg.svd(A, full_matrices=False)
+            P[i, :] = VT.T[:, -1]
 
         pts = (P.T / P[:, 3]).T
-        return pts if homoeneous else pts[:, 0:3]
+        return pts
 
     def _estimate_fundamental(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -124,14 +122,48 @@ class BootstrapInitializer:
         # match features
         matcher = FeatureMatcher(MatcherType.FLANN, k=2)
         matches = matcher.match_descriptors(des0, des1)
+        # matcher.match_plotter(self.img1, kp0, self.img2, kp1, matches)
 
-        # 2D matched points (num_matches, 2)
+        # 2D hom. matched points (num_matches, 3)
         pts0 = np.array([kp0[match.queryIdx].pt for match in matches])
         pts1 = np.array([kp1[match.trainIdx].pt for match in matches])
+        pts0 = np.hstack((pts0, np.ones((pts0.shape[0], 1))))
+        pts1 = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
 
-        F, mask = cv2.findFundamentalMat(pts0, pts1, cv2.FM_LMEDS)
+        def normalize_pts(pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+            num_pts, _ = pts.shape
+            mean = np.mean(pts[:, 0:2], axis=0)
+            centered = pts[:, 0:2] - mean
+            sigma = np.sqrt(np.mean(np.sum(centered ** 2, axis=1)))
+            s = np.sqrt(2) / sigma
+            T = np.array([[s, 0, -s * mean[0]],
+                          [0, s, -s * mean[1]],
+                          [0, 0, 1]])
+            return (T @ pts.T).T, T
 
-        # We select only inlier points
+        # normalize pts for better numerical conditioning
+        norm_pts0, T_1 = normalize_pts(pts0)
+        norm_pts1, T_2 = normalize_pts(pts1)
+        F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.RANSAC,ransacReprojThreshold=2, confidence=0.99)
+
+        # unnormalize fundamental matrix
+        F = T_2.T @ F @ T_1
+
+        # select only inlier points
         pts0 = pts0[mask.ravel() == 1]
         pts1 = pts1[mask.ravel() == 1]
         return F, pts0, pts1
+
+    # def fundamental(self, pts1, pts2):
+    #     num_pts, _ = pts1.shape
+    #     A = np.zeros((num_pts, 9))
+    #     for i in range(num_pts):
+    #         p1 = pts1[i, :][np.newaxis].T
+    #         p2 = pts2[i, :][np.newaxis].T
+    #         k = np.kron(p1, p2)
+    #         A[i, :] = k.T
+    #     _, _, V = np.linalg.svd(A, full_matrices=False)
+    #     F = V[-1, :].reshape(3, 3).T
+    #     u, s, v = np.linalg.svd(F)
+    #     s[2] = 0
+    #     return u @ np.diag(s) @ v
