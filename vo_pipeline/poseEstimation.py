@@ -5,6 +5,9 @@
 # import packages
 import cv2 as cv
 import numpy as np
+import enum
+from typing import Callable, Tuple
+from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 
 
 # TODO: finish function
@@ -44,10 +47,54 @@ def estimatePose(kp1: np.ndarray, kp2: np.ndarray, matches: np.ndarray):
     return matchesMask
 
 
-def PnP():
-    """
-    OpenCV PnP solver, find homography already gives M back s.t. this function might not be used
-    """
-    cv.SOLVEPNP_P3P
+class AlgoMethod(enum.Enum):
+    DEFAULT = 0,
+    P3P = 1,
+    AP3P = 2,
+
+
+class PoseEstimation:
+    
+    def __init__(self, K: np.ndarray, algo_method_type: AlgoMethod=AlgoMethod.DEFAULT):
+        self.K = K
+        self.algo_method_type = algo_method_type
+        self.algo_method: Callable
+        self.get_method()   
+        self.matcher = FeatureMatcher(MatcherType.FLANN, k=2) 
+        
+    def get_method(self):
+        if self.extractor_type == AlgoMethod.DEFAULT:
+            self.algo_method = cv.SOLVEPNP_ITERATIVE()
+        elif self.extractor_type == AlgoMethod.P3P:
+            self.algo_method = cv.SOLVEPNP_P3P
+        elif self.extractor_type == AlgoMethod.AP3P:
+            self.algo_method = cv.SOLVEPNP_AP3P
+    
+    
+    def PnP(self, pointcloud: np.ndarray, imgKeypoints: np.ndarray) -> np.ndarray:
+        
+        """
+        :param pointcloud:          already matched 3D pointcloud extracted from keyframes
+        :param imgKeypoints:        matched keypoints from current image
+        :return                     M matrix
+        """
+        # Same number of keypoints
+        assert pointcloud.shape(1) == imgKeypoints.shape(1)
+        
+        rot, trans = cv.solvePnPRansac(pointcloud, imgKeypoints, self.K, flags=self.algo_method)
+        M = np.column_stack(rot,trans)
+
+        return M
+        
+    def matchKeyPoints(self, kp0: np.ndarray, kp1: np.ndarray, des0: np.ndarray, des1: np.ndarray) -> Tuple[np.ndarray,np.ndarray]:
+        
+        matches = self.matcher.match_descriptors(des0, des1)
+
+        # 2D hom. matched points (num_matches, 3)
+        pts0 = np.array([kp0[match.queryIdx].pt for match in matches])
+        pts1 = np.array([kp1[match.trainIdx].pt for match in matches])
+        pts0 = np.hstack((pts0, np.ones((pts0.shape[0], 1))))
+        pts1 = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
+                
 
 

@@ -144,8 +144,8 @@ class BootstrapInitializer:
         # normalize pts for better numerical conditioning
         norm_pts0, T_1 = normalize_pts(pts0)
         norm_pts1, T_2 = normalize_pts(pts1)
-        F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.RANSAC,ransacReprojThreshold=2, confidence=0.99)
-
+        F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.RANSAC, ransacReprojThreshold=2,
+                                         confidence=0.99)
         # unnormalize fundamental matrix
         F = T_2.T @ F @ T_1
 
