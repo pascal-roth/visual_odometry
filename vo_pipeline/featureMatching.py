@@ -70,7 +70,7 @@ class FeatureMatcher:
 
     @staticmethod
     def match_plotter(img1, kp1, img2, kp2, matches):
-        img_matches = cv.drawMatchesKnn(img1, kp1, img2, kp2, matches, None,
+        img_matches = cv.drawMatchesKnn(img1, kp1, img2, kp2, np.array(matches)[np.newaxis].T, None,
                                         flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
         plt.imshow(img_matches)
         plt.show()
