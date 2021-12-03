@@ -2,6 +2,7 @@ from utils.loadData import DatasetLoader, DatasetType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.bootstrap import BootstrapInitializer
+from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
 import matplotlib.pyplot as plt
 from utils.matrix import *
 import numpy as np
@@ -51,6 +52,34 @@ def bootstraping_example():
     ax.legend()
     plt.title("Reconstructed point cloud")
     plt.show()
+
+
+def poseEstimation_example():
+
+    dataset = DatasetLoader(DatasetType.PARKING).load()
+    img = []
+    M   = []
+
+    _, img[0] = next(dataset.frames)
+    _, img[1] = next(dataset.frames)
+    _, img[2] = next(dataset.frames)
+    _, img[3] = next(dataset.frames)
+    K, img[4] = next(dataset.frames)
+
+    poseEstimator = PoseEstimation(K,AlgoMethod.P3P)
+    bootstrapper = BootstrapInitializer(img[0], img[4], K)
+
+    pointcloud = bootstrapper.point_cloud
+
+    for idx in range(4):
+
+        # extract feature in images
+        descriptor = FeatureExtractor(ExtractorType.SIFT)
+        kp, des = descriptor.get_kp(img[idx])
+
+        matchedPoints = poseEstimator.matchKeyPoints(kp,des,pointcloud,desPointcloud)
+        M[idx] = poseEstimator.PnP(pointcloud,matchedPoints[0],matchedPoints[1])
+
 
 
 def main():
