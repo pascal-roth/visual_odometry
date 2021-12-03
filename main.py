@@ -2,6 +2,7 @@ from utils.loadData import DatasetLoader, DatasetType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.bootstrap import BootstrapInitializer
+from vo_pipeline.poseEstimation import PoseEstimation
 import matplotlib.pyplot as plt
 from utils.matrix import *
 import numpy as np
@@ -31,7 +32,9 @@ def bootstraping_example():
     next(dataset.frames)
     next(dataset.frames)
     next(dataset.frames)
+    next(dataset.frames)
     K, img1 = next(dataset.frames)
+    i = 5
 
     bootstrapper = BootstrapInitializer(img0, img1, K)
 
@@ -42,9 +45,12 @@ def bootstraping_example():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
     ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], label="reconstructed points")
-    ax.scatter(0, 0, 0,"*", color="red", label="$t_0$")
+    ax.scatter(0, 0, 0, "*", color="red", label="$t_0$")
     t_3 = T[0:3, 3]
-    ax.scatter(t_3[0], t_3[1], t_3[2], "*", color="yellow", label="$t_3$")
+    t_gt = dataset.T[i, 0:3, 3]
+    print(f"t_3: {t_3}, t_gt: {t_gt}")
+    ax.scatter(t_3[0], t_3[1], t_3[2], "*", color="yellow", label=f"$t_{i}$")
+    ax.scatter(t_gt[0], t_gt[1], t_gt[2], "*", color="green", label=f"$tgt_{i}$")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("z")

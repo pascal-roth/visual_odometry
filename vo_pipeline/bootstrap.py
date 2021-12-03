@@ -6,17 +6,36 @@ import numpy as np
 from utils.matrix import skew
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
+from params import *
 
 
 class BootstrapInitializer:
 
     def __init__(self, img1: np.ndarray, img2: np.ndarray, K: np.ndarray):
+        # image1
         self.img1 = img1
+        # image2
         self.img2 = img2
+        # (3, 3) intrinsic parameter matrix
         self.K = K
 
-        self.F, self.pts1, self.pts2 = self._estimate_fundamental()
-        self.T, self.point_cloud = self._transform_matrix(self.F, self.pts1, self.pts2)
+        F, pts1, pts2, pts_des1, pts_des2 = self._estimate_fundamental()
+        # (3, 3) fundamental matrix
+        self.F = F
+        # homogeneous points in img1, (num_matches, 3)
+        self.pts1 = pts1
+        # homogeneous points in img2, (num_matches, 3)
+        self.pts2 = pts2
+        # descriptor vectors corresponding to img1, same order as pts1, (num_matches, 128)
+        self.pts_des1 = pts_des1
+        # descriptor vectors corresponding to img2, same order as pts2,  (num_matches, 128)
+        self.pts_des2 = pts_des2
+        T, point_cloud = self._transform_matrix(self.F, self.pts1, self.pts2)
+
+        # homogeneous transform T_img1,img0, (4,4)
+        self.T = T
+        # homogeneous point cloud, same order as pts1, pts2, (num_matches, 4)
+        self.point_cloud = point_cloud
 
     # def select_baseline(self):
     #     img0 = None
@@ -108,11 +127,13 @@ class BootstrapInitializer:
         pts = (P.T / P[:, 3]).T
         return pts
 
-    def _estimate_fundamental(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _estimate_fundamental(self, normalize=False) -> Tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Estimates the fundamental matrix F given two images
         (Solves the bootstrapping problem)
-        :return: fundamental matrix F, feature points in img1, feature points in img2
+        :return: fundamental matrix F, feature points in img1, descriptors of points in img 1,
+                 feature points in img2, descriptors of points in img2
         """
         # extract features in both images
         descriptor = FeatureExtractor(ExtractorType.SIFT)
@@ -120,15 +141,22 @@ class BootstrapInitializer:
         kp1, des1 = descriptor.get_kp(self.img2)
 
         # match features
-        matcher = FeatureMatcher(MatcherType.FLANN, k=2)
+        matcher = FeatureMatcher(MatcherType.FLANN, k=2, matching_threshold=MATCHING_THRESHOLD)
         matches = matcher.match_descriptors(des0, des1)
         # matcher.match_plotter(self.img1, kp0, self.img2, kp1, matches)
 
         # 2D hom. matched points (num_matches, 3)
-        pts0 = np.array([kp0[match.queryIdx].pt for match in matches])
-        pts1 = np.array([kp1[match.trainIdx].pt for match in matches])
-        pts0 = np.hstack((pts0, np.ones((pts0.shape[0], 1))))
-        pts1 = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
+        num_matches = len(matches)
+        pts0 = np.ones((num_matches, 3))
+        pts1 = np.ones((num_matches, 3))
+        # 128D feature vectors
+        pts_des0 = np.zeros((num_matches, 128))
+        pts_des1 = np.zeros((num_matches, 128))
+        for i, match in enumerate(matches):
+            pts0[i, 0:2] = kp0[match.queryIdx].pt
+            pts1[i, 0:2] = kp1[match.trainIdx].pt
+            pts_des0[i] = des0[match.queryIdx]
+            pts_des1[i] = des1[match.trainIdx]
 
         def normalize_pts(pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
             num_pts, _ = pts.shape
@@ -142,17 +170,26 @@ class BootstrapInitializer:
             return (T @ pts.T).T, T
 
         # normalize pts for better numerical conditioning
-        norm_pts0, T_1 = normalize_pts(pts0)
-        norm_pts1, T_2 = normalize_pts(pts1)
-        F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.RANSAC, ransacReprojThreshold=2,
-                                         confidence=0.99)
-        # unnormalize fundamental matrix
-        F = T_2.T @ F @ T_1
+        if normalize:
+            norm_pts0, T_1 = normalize_pts(pts0)
+            norm_pts1, T_2 = normalize_pts(pts1)
+            F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.FM_RANSAC,
+                                             ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
+                                             confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
+            # unnormalize fundamental matrix
+            F = T_2.T @ F @ T_1
+        else:
+            F, mask = cv2.findFundamentalMat(pts0[:, 0:2], pts1[:, 0:2], cv2.FM_RANSAC,
+                                             ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
+                                             confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
 
         # select only inlier points
-        pts0 = pts0[mask.ravel() == 1]
-        pts1 = pts1[mask.ravel() == 1]
-        return F, pts0, pts1
+        keep = mask.ravel() == 1
+        pts0 = pts0[keep]
+        pts1 = pts1[keep]
+        pts_des0 = pts_des0[keep]
+        pts_des1 = pts_des1[keep]
+        return F, pts0, pts1, pts_des0, pts_des1
 
     # def fundamental(self, pts1, pts2):
     #     num_pts, _ = pts1.shape

@@ -8,6 +8,8 @@ import numpy as np
 import enum
 from typing import Callable, Tuple
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
+from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
+from vo_pipeline.bootstrap import BootstrapInitializer
 
 
 # TODO: finish function
@@ -55,7 +57,7 @@ class AlgoMethod(enum.Enum):
 
 class PoseEstimation:
     
-    def __init__(self, K: np.ndarray, algo_method_type: AlgoMethod=AlgoMethod.DEFAULT):
+    def __init__(self, K: np.ndarray, algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
         self.K = K
         self.algo_method_type = algo_method_type
         self.algo_method: Callable
@@ -71,30 +73,46 @@ class PoseEstimation:
             self.algo_method = cv.SOLVEPNP_AP3P
     
     
-    def PnP(self, pointcloud: np.ndarray, imgKeypoints: np.ndarray) -> np.ndarray:
+    def PnP(self, pointcloud: np.ndarray, img_key_points: np.ndarray) -> np.ndarray:
         
         """
         :param pointcloud:          already matched 3D pointcloud extracted from keyframes
-        :param imgKeypoints:        matched keypoints from current image
+        :param img_key_points:        matched keypoints from current image
         :return                     M matrix
         """
         # Same number of keypoints
-        assert pointcloud.shape(1) == imgKeypoints.shape(1)
+        assert pointcloud.shape(0) == img_key_points.shape(0)
         
-        rot, trans = cv.solvePnPRansac(pointcloud, imgKeypoints, self.K, flags=self.algo_method)
+        rot, trans = cv.solvePnPRansac(pointcloud, img_key_points, self.K, flags=self.algo_method)
         M = np.column_stack(rot,trans)
 
         return M
         
-    def matchKeyPoints(self, kp0: np.ndarray, kp1: np.ndarray, des0: np.ndarray, des1: np.ndarray) -> Tuple[np.ndarray,np.ndarray]:
-        
+    def match_key_points(self, pointcloud: np.ndarray, des0: np.ndarray, img1: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+        """
+        :param pointcloud:          current pointcloud extracted from last 2 keyframes
+        :param des0:                descriptors from last keyframe
+        :param img1:                current image
+        :return                     tuple with matched pointcloud and keypoints from current image
+        """
+
+        # Extract keypoints and descriptors from next image
+        descriptor = FeatureExtractor(ExtractorType.SIFT)
+        kp1, des1 = descriptor.get_kp(img1)
         matches = self.matcher.match_descriptors(des0, des1)
 
         # 2D hom. matched points (num_matches, 3)
-        pts0 = np.array([kp0[match.queryIdx].pt for match in matches])
-        pts1 = np.array([kp1[match.trainIdx].pt for match in matches])
-        pts0 = np.hstack((pts0, np.ones((pts0.shape[0], 1))))
-        pts1 = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
+        num_matches = len(matches)
+        pts1 = np.ones((num_matches, 3))
+        matched_pointcloud = np.zeros((num_matches, 3))
+
+        # Save keypoints of image 1 mathced with keypoints of image 1
+        for i, match in enumerate(matches):
+            pts1[i, 0:2] = kp1[match.trainIdx].pt
+            matched_pointcloud[i, :] = pointcloud[match.queryIdx, :]
+
+        return matched_pointcloud, pts1
                 
 
 
