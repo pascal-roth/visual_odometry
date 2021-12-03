@@ -6,6 +6,7 @@ import numpy as np
 from utils.matrix import skew
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
+from params import *
 
 
 class BootstrapInitializer:
@@ -108,7 +109,7 @@ class BootstrapInitializer:
         pts = (P.T / P[:, 3]).T
         return pts
 
-    def _estimate_fundamental(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _estimate_fundamental(self, normalize=False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Estimates the fundamental matrix F given two images
         (Solves the bootstrapping problem)
@@ -120,13 +121,15 @@ class BootstrapInitializer:
         kp1, des1 = descriptor.get_kp(self.img2)
 
         # match features
-        matcher = FeatureMatcher(MatcherType.FLANN, k=2)
+        matcher = FeatureMatcher(MatcherType.FLANN, k=2, matching_threshold=MATCHING_THRESHOLD)
         matches = matcher.match_descriptors(des0, des1)
         # matcher.match_plotter(self.img1, kp0, self.img2, kp1, matches)
 
         # 2D hom. matched points (num_matches, 3)
         pts0 = np.array([kp0[match.queryIdx].pt for match in matches])
         pts1 = np.array([kp1[match.trainIdx].pt for match in matches])
+        # pts0 = np.loadtxt("./matches0001.txt").T
+        # pts1 = np.loadtxt("./matches0002.txt").T
         pts0 = np.hstack((pts0, np.ones((pts0.shape[0], 1))))
         pts1 = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
 
@@ -142,12 +145,18 @@ class BootstrapInitializer:
             return (T @ pts.T).T, T
 
         # normalize pts for better numerical conditioning
-        norm_pts0, T_1 = normalize_pts(pts0)
-        norm_pts1, T_2 = normalize_pts(pts1)
-        F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.RANSAC,ransacReprojThreshold=2, confidence=0.99)
-
-        # unnormalize fundamental matrix
-        F = T_2.T @ F @ T_1
+        if normalize:
+            norm_pts0, T_1 = normalize_pts(pts0)
+            norm_pts1, T_2 = normalize_pts(pts1)
+            F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.FM_RANSAC,
+                                             ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
+                                             confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
+            # unnormalize fundamental matrix
+            F = T_2.T @ F @ T_1
+        else:
+            F, mask = cv2.findFundamentalMat(pts0[:, 0:2], pts1[:, 0:2], cv2.FM_RANSAC,
+                                             ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
+                                             confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
 
         # select only inlier points
         pts0 = pts0[mask.ravel() == 1]
