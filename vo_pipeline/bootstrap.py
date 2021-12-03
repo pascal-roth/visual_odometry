@@ -2,6 +2,7 @@ from typing import Tuple
 
 import cv2
 import numpy as np
+import logging
 
 from utils.matrix import skew
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
@@ -11,13 +12,18 @@ from params import *
 
 class BootstrapInitializer:
 
-    def __init__(self, img1: np.ndarray, img2: np.ndarray, K: np.ndarray):
-        # image1
+    def __init__(self, img1: np.ndarray, img2: np.ndarray, K: np.ndarray, max_point_dist: float = 100):
+        """
+
+        :param img1: image1
+        :param img2: image2
+        :param K: (3, 3) intrinsic parameter matrix
+        :param max_point_dist: max distance from origin until points will be reconstructed
+        """
         self.img1 = img1
-        # image2
         self.img2 = img2
-        # (3, 3) intrinsic parameter matrix
         self.K = K
+        self.max_point_dist = max_point_dist
 
         F, pts1, pts2, pts_des1, pts_des2 = self._estimate_fundamental()
         # (3, 3) fundamental matrix
@@ -30,12 +36,20 @@ class BootstrapInitializer:
         self.pts_des1 = pts_des1
         # feature vectors corresponding to img2, same order as pts2,  (num_matches, 128)
         self.pts_des2 = pts_des2
-        T, point_cloud = self._transform_matrix(self.F, self.pts1, self.pts2)
+        T, point_cloud, mask = self._transform_matrix(self.F, self.pts1, self.pts2)
 
         # homogeneous transform T_img1,img0, (4,4)
         self.T = T
         # homogeneous point cloud, same order as pts1, pts2, (num_matches, 4)
         self.point_cloud = point_cloud
+
+        # mask points where reconstruction is infeasible
+        self.pts1 = self.pts1[mask]
+        self.pts2 = self.pts2[mask]
+        self.pts_des1 = self.pts_des1[mask]
+        self.pts_des2 = self.pts_des2[mask]
+        self.point_cloud = self.point_cloud[mask]
+
 
     # def select_baseline(self):
     #     img0 = None
@@ -60,7 +74,8 @@ class BootstrapInitializer:
         key_dist = np.linalg.norm(T[0:3, 3])
         return float(key_dist / mean_depth)
 
-    def _transform_matrix(self, F: np.ndarray, pts1: np.ndarray, pts2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def _transform_matrix(self, F: np.ndarray, pts1: np.ndarray, pts2: np.ndarray) -> Tuple[
+        np.ndarray, np.ndarray, np.ndarray]:
         """
         Computes homogeneous transform T.
         :param F: Fundamental matrix, (3, 3)
@@ -77,7 +92,7 @@ class BootstrapInitializer:
         U, _, VT = np.linalg.svd(E)
         R1 = U @ W @ VT
         R2 = U @ W.T @ VT
-        u = U[:, -1]
+        u = U[:, -1][np.newaxis].T
         if np.linalg.det(R1) < 0:
             R1 = -R1
         if np.linalg.det(R2) < 0:
@@ -90,12 +105,13 @@ class BootstrapInitializer:
         R = None
         t = None
         point_cloud = None
+        cam2_W = None
 
         M1 = self.K @ np.eye(3, 4)
         most_pts_in_front = -np.inf
         for R_hat in [R1, R2]:
-            for u_hat in [u, -u]:
-                T_hat = np.hstack((R_hat, u_hat[np.newaxis].T))
+            for u_hat in [-u, u]:
+                T_hat = np.hstack((R_hat, u_hat))
                 M2 = self.K @ T_hat
                 P_cam1 = BootstrapInitializer._linear_triangulation(pts1, pts2, M1, M2)
                 P_cam2 = (T_hat @ P_cam1.T).T
@@ -105,11 +121,19 @@ class BootstrapInitializer:
                     t = u_hat
                     point_cloud = P_cam1
                     most_pts_in_front = num_in_font
+                    cam2_W = -R_hat.T @ u_hat
 
         T = np.eye(4)
         T[0:3, 0:3] = R
         T[0:3, 3] = t.ravel()
-        return T, point_cloud
+        # filter point cloud for feasible points
+        min_real_z = min(0, cam2_W[2])
+        close_enough = np.linalg.norm(point_cloud[:, 0:3], axis=1) <= self.max_point_dist
+        in_front_cam = point_cloud[:, 2] > min_real_z
+        mask = close_enough & in_front_cam
+        num_rejected = np.sum(~mask)
+        logging.info(f"Rejected {num_rejected} points during 3D reconstruction.")
+        return T, point_cloud, mask
 
     @staticmethod
     def _linear_triangulation(pts1: np.ndarray, pts2: np.ndarray, M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
@@ -133,7 +157,7 @@ class BootstrapInitializer:
         Estimates the fundamental matrix F given two images
         (Solves the bootstrapping problem)
         :return: fundamental matrix F, feature points in img1, descriptors of points in img 1,
-                 feature points in img2, descriptors of points in img2
+                 feature points        # (3, 3) intrinsic parameter matrix in img2, descriptors of points in img2
         """
         # extract features in both images
         descriptor = FeatureExtractor(ExtractorType.SIFT)
@@ -158,6 +182,14 @@ class BootstrapInitializer:
             pts_des0[i] = des0[match.queryIdx]
             pts_des1[i] = des1[match.trainIdx]
 
+        # pts0 = np.loadtxt("./matches0001.txt").T
+        # pts1 = np.loadtxt("./matches0002.txt").T
+        # n, _ = pts0.shape
+        # pts0 = np.hstack((pts0, np.ones((n,1))))
+        # pts1 = np.hstack((pts1, np.ones((n,1))))
+        # pts_des0 = pts0
+        # pts_des1 = pts1
+
         def normalize_pts(pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
             num_pts, _ = pts.shape
             mean = np.mean(pts[:, 0:2], axis=0)
@@ -176,12 +208,14 @@ class BootstrapInitializer:
             F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.FM_RANSAC,
                                              ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
                                              confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
+            # F = self.fundamental(norm_pts0,norm_pts1)
             # unnormalize fundamental matrix
             F = T_2.T @ F @ T_1
         else:
             F, mask = cv2.findFundamentalMat(pts0[:, 0:2], pts1[:, 0:2], cv2.FM_RANSAC,
                                              ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
                                              confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
+            # F = self.fundamental(pts0, pts1)
 
         # select only inlier points
         keep = mask.ravel() == 1

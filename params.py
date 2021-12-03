@@ -1,6 +1,6 @@
 # Bootstrapping phase
 # Feature matching
-MATCHING_THRESHOLD: float = 0.75
+MATCHING_THRESHOLD: float = 0.6
 # RANSAC Fundamental matrix estimation
 RANSAC_REPROJ_THRESHOLD: float = .5
 RANSAC_CONFIDENCE: float = 0.999
