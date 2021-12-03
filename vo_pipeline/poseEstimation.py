@@ -10,44 +10,8 @@ from typing import Callable, Tuple
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.bootstrap import BootstrapInitializer
-
-
-# TODO: finish function
-def estimatePose(kp1: np.ndarray, kp2: np.ndarray, matches: np.ndarray):
-    """
-    Open-CV Tutorial: https://docs.opencv.org/4.x/d1/de0/tutorial_py_feature_homography.html
-
-    RANSAC Alternative: According to https://opencv.org/evaluating-opencvs-new-ransacs/, the standard RANSAC method
-    has a bad performance, thus USAC_MAGSAC is used! (Paper found [here](https://arxiv.org/abs/1912.05909))
-
-    :param kp1
-    :param kp2
-    :param matches
-    """
-    MIN_MATCH_COUNT = 10
-    use_USAC = False
-
-    if len(matches) > MIN_MATCH_COUNT:
-        src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-        dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-        if use_USAC:
-            raise KeyError('Find Homography does not support USAC MAGSAC, have to think about if we implement it'
-                           ' by ourself')
-            M, mask = cv.findHomography(src_pts, dst_pts, cv.USAC_MAGSAC, 5.0)
-        else:
-            M, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
-        matchesMask = mask.ravel().tolist()
-
-        # h, w, d = img1.shape
-        # pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
-        # dst = cv.perspectiveTransform(pts, M)
-        # img2 = cv.polylines(img2, [np.int32(dst)], True, 255, 3, cv.LINE_AA)
-    else:
-        print(f"Not enough matches are found - {len(matches)}/{MIN_MATCH_COUNT}")
-        matchesMask = None
-
-    return matchesMask
-
+from vo_pipeline.trackPoints import TrackPoints
+import params
 
 class AlgoMethod(enum.Enum):
     DEFAULT = 0,
@@ -57,19 +21,21 @@ class AlgoMethod(enum.Enum):
 
 class PoseEstimation:
     
-    def __init__(self, K: np.ndarray, algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
+    def __init__(self, K: np.ndarray, use_KLT: bool, algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
         self.K = K
         self.algo_method_type = algo_method_type
         self.algo_method: Callable
         self.get_method()   
         self.matcher = FeatureMatcher(MatcherType.FLANN, k=2) 
+        self.use_KLT = use_KLT
+        self.KLT_tracker = TrackPoints(params.KLT_RADIUS, params.KLT_N_ITERS, params.KLT_LAMBDA)
         
     def get_method(self):
-        if self.extractor_type == AlgoMethod.DEFAULT:
+        if self.algo_method_type == AlgoMethod.DEFAULT:
             self.algo_method = cv.SOLVEPNP_ITERATIVE()
-        elif self.extractor_type == AlgoMethod.P3P:
+        elif self.algo_method_type == AlgoMethod.P3P:
             self.algo_method = cv.SOLVEPNP_P3P
-        elif self.extractor_type == AlgoMethod.AP3P:
+        elif self.algo_method_type == AlgoMethod.AP3P:
             self.algo_method = cv.SOLVEPNP_AP3P
     
     
@@ -77,40 +43,55 @@ class PoseEstimation:
         
         """
         :param pointcloud:          already matched 3D pointcloud extracted from keyframes
-        :param img_key_points:        matched keypoints from current image
+        :param img_key_points:      matched keypoints from current image
         :return                     M matrix
         """
         # Same number of keypoints
-        assert pointcloud.shape(0) == img_key_points.shape(0)
+        assert pointcloud.shape[0] == img_key_points.shape[0]
         
-        rot, trans = cv.solvePnPRansac(pointcloud, img_key_points, self.K, flags=self.algo_method)
-        M = np.column_stack(rot,trans)
+        # Solve RANSAC P3P to extract rotation matrix and translation vector 
+        success, rvec, trans, _ = cv.solvePnPRansac(pointcloud, img_key_points, self.K, distCoeffs=None, flags=self.algo_method)
+        assert success
+        
+        # Convert to homogeneous coordinates
+        R, _ = cv.Rodrigues(rvec)
+        M = np.hstack((R, trans))
+        M = np.vstack((M, np.array([0, 0, 0, 1])))
 
         return M
         
-    def match_key_points(self, pointcloud: np.ndarray, des0: np.ndarray, img1: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def match_key_points(self, pointcloud: np.ndarray, kp0: np.ndarray, des0: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
         """
         :param pointcloud:          current pointcloud extracted from last 2 keyframes
+        :param kp0:                 keypoints from last keyframe
         :param des0:                descriptors from last keyframe
+        :param img0:                last keyframe image
         :param img1:                current image
         :return                     tuple with matched pointcloud and keypoints from current image
         """
 
-        # Extract keypoints and descriptors from next image
-        descriptor = FeatureExtractor(ExtractorType.SIFT)
-        kp1, des1 = descriptor.get_kp(img1)
-        matches = self.matcher.match_descriptors(des0, des1)
+        if self.use_KLT:
+            # Apply KLT tracking to get keypoints in img1
+            pts1, mask = self.KLT_tracker.trackKLT(img0, img1, kp0)
+            matched_pointcloud = pointcloud[mask]
+            
+        
+        else:
+            # Extract keypoints and descriptors from next image
+            descriptor = FeatureExtractor(ExtractorType.SIFT)
+            kp1, des1 = descriptor.get_kp(img1)
+            matches = self.matcher.match_descriptors(des0, des1)
 
-        # 2D hom. matched points (num_matches, 3)
-        num_matches = len(matches)
-        pts1 = np.ones((num_matches, 3))
-        matched_pointcloud = np.zeros((num_matches, 3))
+            # 2D pixel coordinates and matched points in pointcloud
+            num_matches = len(matches)
+            pts1 = np.zeros((num_matches, 2))
+            matched_pointcloud = np.zeros((num_matches, 3))
 
-        # Save keypoints of image 1 mathced with keypoints of image 1
-        for i, match in enumerate(matches):
-            pts1[i, 0:2] = kp1[match.trainIdx].pt
-            matched_pointcloud[i, :] = pointcloud[match.queryIdx, :]
+            # Save matched keypoints from current image and corresponding points in pointcloud
+            for i, match in enumerate(matches):
+                pts1[i, :] = kp1[match.trainIdx].pt
+                matched_pointcloud[i, :] = pointcloud[match.queryIdx, 0:3]
 
         return matched_pointcloud, pts1
                 
