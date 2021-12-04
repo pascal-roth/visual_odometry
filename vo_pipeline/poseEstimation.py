@@ -73,8 +73,16 @@ class PoseEstimation:
 
         if self.use_KLT:
             # Apply KLT tracking to get keypoints in img1
-            pts1, mask = self.KLT_tracker.trackKLT(img0, img1, kp0)
-            matched_pointcloud = pointcloud[mask]
+            
+            # Solution from  exercise9
+            # pts1, mask = self.KLT_tracker.trackKLT(img0, img1, kp0)
+            # matched_pointcloud = pointcloud[mask]
+            
+            # Opencv KLT
+            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(kp0), None)
+            found = st == 1
+            pts1 = pts1[found[:, 0]]
+            matched_pointcloud = pointcloud[found[:, 0], 0:3]
             
         
         else:
@@ -94,6 +102,7 @@ class PoseEstimation:
                 matched_pointcloud[i, :] = pointcloud[match.queryIdx, 0:3]
 
         return matched_pointcloud, pts1
+
                 
 
 

@@ -79,8 +79,8 @@ def bootstraping_example():
 
 
 def poseEstimation_example():
-
-    dataset = DatasetLoader(DatasetType.PARKING).load()
+    
+    dataset = DatasetLoader(DatasetType.KITTI).load()
 
     M = []
 
@@ -89,6 +89,7 @@ def poseEstimation_example():
     next(dataset.frames)
     next(dataset.frames)
     K, img2 = next(dataset.frames)
+    i = 4
 
     poseEstimator = PoseEstimation(K, use_KLT=True, algo_method_type=AlgoMethod.P3P)
     bootstrapper = BootstrapInitializer(img1, img2, K, max_point_dist=50)
@@ -100,12 +101,16 @@ def poseEstimation_example():
     ax = fig.add_subplot(111, projection="3d")
     ax.scatter(pointcloud[:, 0], pointcloud[:, 1], pointcloud[:, 2], label="reconstructed points")
     ax.scatter(0, 0, 0, "*", color="red", label="$t_0$")
-    t_gt = dataset.T[4, 0:3, 3]
-    ax.scatter(t_gt[0], t_gt[1], t_gt[2], "*", color="green", label=f"$tgt_{4}$")
-    print(f"t_gt: {t_gt}")
+
+    def hom_inv(T):
+        I = np.zeros_like(T)
+        I[0:3, 0:3] = T[0:3, 0:3].T
+        I[0:3, 3] = -T[0:3, 0:3].T @ T[0:3, 3]
+        return I
     
-    pose_init = np.linalg.inv(bootstrapper.T)
+    pose_init = hom_inv(bootstrapper.T)
     t_act = pose_init[0:3, 3]
+    gt_scale = np.linalg.norm(t_act) / np.linalg.norm(dataset.T[i, 0:3, 3])
     ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="yellow", label=f"$t_{4}$")
     print(f"t_act: {t_act}")
 
@@ -116,9 +121,11 @@ def poseEstimation_example():
         matched_pointcloud, img_kpts = poseEstimator.match_key_points(pointcloud, bootstrapper.pts2[:, 0:2], bootstrapper.pts_des2, img2, img)
         M.append(poseEstimator.PnP(matched_pointcloud, img_kpts))
         # Maybe np.linalg.inv(M[idx])
-        pose = pose_init @ M[idx]
-        t_act = pose[0:3, 3]
-        ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="yellow", label=f"$t_{idx + 5}$")
+        pose = pose_init @ hom_inv(M[idx])
+        t_act = pose[:, 3]
+        ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="red")
+        t_gt = gt_scale * dataset.T[i + idx, 0:3, 3]
+        ax.scatter(t_gt[0], t_gt[1], t_gt[2], "*", color="green")
         print(f"t_act: {t_act}")
         
     ax.set_xlabel("x")
@@ -127,6 +134,8 @@ def poseEstimation_example():
     ax.legend()
     plt.title("Reconstructed point cloud")
     plt.show()
+
+
 
 
 
