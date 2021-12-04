@@ -79,7 +79,7 @@ def bootstraping_example():
 
 
 def poseEstimation_example():
-
+    
     dataset = DatasetLoader(DatasetType.KITTI).load()
 
     M = []
@@ -134,6 +134,8 @@ def poseEstimation_example():
     ax.legend()
     plt.title("Reconstructed point cloud")
     plt.show()
+
+
 
 
 

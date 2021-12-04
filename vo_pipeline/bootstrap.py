@@ -236,4 +236,4 @@ class BootstrapInitializer:
     #     F = V[-1, :].reshape(3, 3).T
     #     u, s, v = np.linalg.svd(F)
     #     s[2] = 0
-    #     return u @ np.diag(s) @ v
+    #     return u @ np.diag(s) @ 
