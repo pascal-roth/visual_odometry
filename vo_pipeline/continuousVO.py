@@ -66,15 +66,16 @@ class ContinuousVO:
         """
     
         kpts = self.descriptor.get_kp(self.frame_queue[-1].img)
-        self.frame_queue[-1].keypoints = kposeEstimation_example
+        self.frame_queue[-1].keypoints = kpts
+
         if not self.point_cloud:
             img1 = self.frame_queue[-1].img
             img2 = self.frame_queue[0].img
             bootstrapper = BootstrapInitializer(img1, img2, self.K, max_point_dist=self.max_point_distance) 
-            self.last_keyframe_coords =  bootstrapper.pts2[:, 0:2]
             self.point_cloud = bootstrapper.point_cloud      
         else:
-            poseEstimator = PoseEstimation(self.K, self.point_cloud[:,0:3], self.last_keyframe_coords, use_KLT=self.useKLT, algo_method_type=AlgoMethod.P3P)
+            
+            poseEstimator = PoseEstimation(self.K, self.point_cloud[:,0:3], kpts, use_KLT=self.useKLT, algo_method_type=AlgoMethod.P3P)
         
             
             
