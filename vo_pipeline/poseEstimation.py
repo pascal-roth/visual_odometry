@@ -59,9 +59,9 @@ class PoseEstimation:
         
         # Convert to homogeneous coordinates
         R, _ = cv.Rodrigues(rvec)
-        M = np.hstack((R, trans))
-        M = np.vstack((M, np.array([0, 0, 0, 1])))
-
+        M = np.eye(4)
+        M[0:3, 0.3] = R
+        M[0:3, 3] = trans
         return M
         
     def match_key_points(self, pointcloud: np.ndarray, kp0: np.ndarray, des0: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> np.ndarray:

@@ -1,3 +1,7 @@
+# General
+FRAME_QUEUE_SIZE = 100
+
+
 # Bootstrapping phase
 # Feature matching
 MATCHING_THRESHOLD: float = 0.6

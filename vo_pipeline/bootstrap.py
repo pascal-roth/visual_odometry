@@ -67,13 +67,6 @@ class BootstrapInitializer:
     #             uncertainty = BootstrapInitializer.get_baseline_uncertainty(T, point_cloud)
     #             print(uncertainty)
 
-    @staticmethod
-    def get_baseline_uncertainty(T: np.ndarray, point_cloud: np.ndarray) -> float:
-        depths = point_cloud[:, 2]
-        mean_depth = np.mean(depths)
-        key_dist = np.linalg.norm(T[0:3, 3])
-        return float(key_dist / mean_depth)
-
     def _transform_matrix(self, F: np.ndarray, pts1: np.ndarray, pts2: np.ndarray) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray]:
         """
