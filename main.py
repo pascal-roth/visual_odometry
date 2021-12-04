@@ -91,7 +91,7 @@ def poseEstimation_example():
     K, img2 = next(dataset.frames)
     i = 4
 
-    poseEstimator = PoseEstimation(K, use_KLT=False, algo_method_type=AlgoMethod.P3P)
+    poseEstimator = PoseEstimation(K, use_KLT=True, algo_method_type=AlgoMethod.P3P)
     bootstrapper = BootstrapInitializer(img1, img2, K, max_point_dist=50)
 
     pointcloud = bootstrapper.point_cloud
