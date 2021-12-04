@@ -21,8 +21,10 @@ class AlgoMethod(enum.Enum):
 
 class PoseEstimation:
     
-    def __init__(self, K: np.ndarray, use_KLT: bool, algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
+    def __init__(self, K: np.ndarray, pointcloud: np.ndarray, first_kps: np.ndarray, use_KLT: bool, algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
         self.K = K
+        self.pointcloud = pointcloud
+        self.prev_kpts = first_kps
         self.algo_method_type = algo_method_type
         self.algo_method: Callable
         self.get_method()   
@@ -37,20 +39,22 @@ class PoseEstimation:
             self.algo_method = cv.SOLVEPNP_P3P
         elif self.algo_method_type == AlgoMethod.AP3P:
             self.algo_method = cv.SOLVEPNP_AP3P
+
+    def update_pointcloud_and_kpts(self, pointcloud: np.ndarray, kps: np.ndarray):
+        self.pointcloud = pointcloud
+        self.prev_kpts = kps
     
-    
-    def PnP(self, pointcloud: np.ndarray, img_key_points: np.ndarray) -> np.ndarray:
+    def PnP(self, img_key_points: np.ndarray) -> np.ndarray:
         
         """
-        :param pointcloud:          already matched 3D pointcloud extracted from keyframes
         :param img_key_points:      matched keypoints from current image
         :return                     M matrix
         """
         # Same number of keypoints
-        assert pointcloud.shape[0] == img_key_points.shape[0]
+        assert self.pointcloud.shape[0] == img_key_points.shape[0]
         
         # Solve RANSAC P3P to extract rotation matrix and translation vector 
-        success, rvec, trans, _ = cv.solvePnPRansac(pointcloud, img_key_points, self.K, distCoeffs=None, flags=self.algo_method)
+        success, rvec, trans, _ = cv.solvePnPRansac(self.pointcloud, img_key_points, self.K, distCoeffs=None, flags=self.algo_method)
         assert success
         
         # Convert to homogeneous coordinates
@@ -60,10 +64,10 @@ class PoseEstimation:
 
         return M
         
-    def match_key_points(self, pointcloud: np.ndarray, kp0: np.ndarray, des0: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def match_key_points(self, pointcloud: np.ndarray, kp0: np.ndarray, des0: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> np.ndarray:
 
         """
-        :param pointcloud:          current pointcloud extracted from last 2 keyframes
+        :param pointcloud:          Initial pointlcoud
         :param kp0:                 keypoints from last keyframe
         :param des0:                descriptors from last keyframe
         :param img0:                last keyframe image
@@ -79,12 +83,11 @@ class PoseEstimation:
             # matched_pointcloud = pointcloud[mask]
             
             # Opencv KLT
-            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(kp0), None, maxLevel=params.KLT_NUM_PYRAMIDS)
+            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(self.prev_kpts), None, maxLevel=params.KLT_NUM_PYRAMIDS)
             found = st == 1
             pts1 = pts1[found[:, 0]]
-            matched_pointcloud = pointcloud[found[:, 0], 0:3]
-            
-        
+            self.update_pointcloud_and_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
+
         else:
             # Extract keypoints and descriptors from next image
             descriptor = FeatureExtractor(ExtractorType.SIFT)
@@ -99,9 +102,10 @@ class PoseEstimation:
             # Save matched keypoints from current image and corresponding points in pointcloud
             for i, match in enumerate(matches):
                 pts1[i, :] = kp1[match.trainIdx].pt
-                matched_pointcloud[i, :] = pointcloud[match.queryIdx, 0:3]
+                matched_pointcloud[i, :] = pointcloud[match.queryIdx, :]
+            self.update_pointcloud_and_kpts(matched_pointcloud, pts1)
 
-        return matched_pointcloud, pts1
+        return pts1
 
                 
 
