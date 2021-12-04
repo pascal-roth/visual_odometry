@@ -1,3 +1,5 @@
+import copy
+
 from utils.loadData import DatasetLoader, DatasetType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
@@ -91,11 +93,11 @@ def poseEstimation_example():
     K, img2 = next(dataset.frames)
     i = 4
 
-    poseEstimator = PoseEstimation(K, use_KLT=True, algo_method_type=AlgoMethod.P3P)
-    bootstrapper = BootstrapInitializer(img1, img2, K, max_point_dist=50)
 
+    bootstrapper = BootstrapInitializer(img1, img2, K, max_point_dist=50)
     pointcloud = bootstrapper.point_cloud
-    
+    poseEstimator = PoseEstimation(K, pointcloud[:,0:3], bootstrapper.pts2[:, 0:2], use_KLT=True, algo_method_type=AlgoMethod.P3P)
+
     # plot resulting point cloud
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
@@ -114,12 +116,16 @@ def poseEstimation_example():
     ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="yellow", label=f"$t_{4}$")
     print(f"t_act: {t_act}")
 
+    prev_img_kpts = bootstrapper.pts2[:, 0:2]
+    prev_img = img2
     for idx in range(15):
 
         # extract feature in images
         _, img = next(dataset.frames)
-        matched_pointcloud, img_kpts = poseEstimator.match_key_points(pointcloud, bootstrapper.pts2[:, 0:2], bootstrapper.pts_des2, img2, img)
-        M.append(poseEstimator.PnP(matched_pointcloud, img_kpts))
+        prev_img_kpts = poseEstimator.match_key_points(pointcloud[:, 0:3], prev_img_kpts, bootstrapper.pts_des2,
+                                                                      prev_img, img)
+        M.append(poseEstimator.PnP(prev_img_kpts))
+        prev_img = copy.copy(img)
         # Maybe np.linalg.inv(M[idx])
         pose = pose_init @ hom_inv(M[idx])
         t_act = pose[:, 3]
