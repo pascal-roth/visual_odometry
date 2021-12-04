@@ -79,7 +79,7 @@ class PoseEstimation:
             # matched_pointcloud = pointcloud[mask]
             
             # Opencv KLT
-            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(kp0), None)
+            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(kp0), None, maxLevel=params.KLT_NUM_PYRAMIDS)
             found = st == 1
             pts1 = pts1[found[:, 0]]
             matched_pointcloud = pointcloud[found[:, 0], 0:3]
