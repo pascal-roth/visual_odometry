@@ -5,6 +5,7 @@ from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.bootstrap import BootstrapInitializer
 from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
+from vo_pipeline.continuousVO import ContinuousVO
 import matplotlib.pyplot as plt
 from utils.matrix import *
 import numpy as np
@@ -142,14 +143,17 @@ def poseEstimation_example():
     plt.show()
 
 
-
+def continuous_vo_example():
+    dataset = DatasetLoader(DatasetType.KITTI).load()
+    continuousVO = ContinuousVO(dataset)
+    continuousVO.run_pipeline()
 
 
 def main():
     # matching_example()
     # bootstraping_example()
-    poseEstimation_example()
-
+    # poseEstimation_example()
+    continuous_vo_example()
 
 if __name__ == "__main__":
     main()

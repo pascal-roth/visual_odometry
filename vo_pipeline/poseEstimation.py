@@ -117,6 +117,20 @@ class PoseEstimation:
 
         return pts1
 
+    def KLT(self, img0: np.ndarray, img1: np.ndarray):
+            # Apply KLT tracking to get keypoints in img1
+            
+            # Solution from  exercise9
+            # pts1, mask = self.KLT_tracker.trackKLT(img0, img1, kp0)
+            # matched_pointcloud = pointcloud[mask]
+            
+            # Opencv KLT
+            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(self.prev_kpts), None, maxLevel=params.KLT_NUM_PYRAMIDS)
+            found = st == 1
+            pts1 = pts1[found[:, 0]]
+            self.update_pointcloud_and_prev_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
+
+
                 
 
 

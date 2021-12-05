@@ -34,7 +34,7 @@ class DatasetLoader:
         if self.dataset_type == DatasetType.KITTI:
             K = np.array([[7.188560000000e+02, 0, 6.071928000000e+02],
                           [0, 7.188560000000e+02, 1.852157000000e+02],
-                          [0, 0, 1]])
+                          [0, 0, 1]], dtype=np.float32)
             kitti_path = os.path.abspath(os.path.join(self.dataset_root, "kitti"))
             return Dataset(K=K,
                            frames=DatasetLoader._load_kitti_frames(kitti_path, K),
@@ -42,7 +42,7 @@ class DatasetLoader:
         elif self.dataset_type == DatasetType.MALAGA:
             K = np.array([[621.18428, 0, 404.0076],
                           [0, 621.18428, 309.05989],
-                          [0, 0, 1]])
+                          [0, 0, 1]], dtype=np.float32)
             malaga_path = os.path.abspath(os.path.join(self.dataset_root, "malaga-urban-dataset-extract-07"))
             return Dataset(K=K,
                            frames=DatasetLoader._load_malaga_frames(malaga_path, K),
@@ -51,7 +51,7 @@ class DatasetLoader:
             parking_path = os.path.abspath(os.path.join(self.dataset_root, "parking"))
             K = np.array([[331.37, 0, 320],
                           [0, 369.568, 240],
-                          [0, 0, 1]])
+                          [0, 0, 1]], dtype=np.float32)
             return Dataset(K=K,
                            frames=DatasetLoader._load_parking_frames(parking_path, K),
                            T=DatasetLoader._load_parking_ground_truth(parking_path))
@@ -62,7 +62,7 @@ class DatasetLoader:
         ground_truth = np.loadtxt(ground_truth_path)
 
         # load ground truth hom. transforms
-        return np.array([np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0) for T in ground_truth])
+        return np.array([np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0) for T in ground_truth], dtype=np.float32)
 
     @staticmethod
     def _load_kitti_frames(path: str, K: np.ndarray) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
@@ -89,7 +89,7 @@ class DatasetLoader:
         ground_truth_path = os.path.join(path, "poses.txt")
         ground_truth = np.loadtxt(ground_truth_path)
         # load ground truth hom. transforms
-        return np.array([np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0) for T in ground_truth])
+        return np.array([np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0) for T in ground_truth], dtype=np.float32)
 
     @staticmethod
     def _load_parking_frames(path: str, K: np.ndarray) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
