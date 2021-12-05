@@ -29,7 +29,7 @@ class ContinuousVO:
         self.descriptor = FeatureExtractor(descriptorType)
         self.matcher = FeatureMatcher(matcherType)
         self.useKLT = useKLT
-        self.poseEstimator = PoseEstimation(self.dataset.K, useKLT, algo_method)
+        self.poseEstimator = PoseEstimation(self.dataset.K, useKLT=useKLT, algo_method_type=algo_method)
 
         # in-memory frame buffer 
         self.frame_queue: List[FrameState] = []
@@ -65,25 +65,22 @@ class ContinuousVO:
         :return             tuple with state of the current frame and current pose
         """
     
-        kpts = self.descriptor.get_kp(self.frame_queue[-1].img)
+        kpts, des = self.descriptor.get_kp(self.frame_queue[-1].img)
         self.frame_queue[-1].keypoints = kpts
-
+        self.frame_queue[-1].descriptors = des
+        
         if not self.point_cloud:
             img1 = self.frame_queue[-1].img
             img2 = self.frame_queue[0].img
             bootstrapper = BootstrapInitializer(img1, img2, self.K, max_point_dist=self.max_point_distance) 
-            self.point_cloud = bootstrapper.point_cloud      
+            self.point_cloud = bootstrapper.point_cloud
+            self.poseEstimator.update_pointcloud_and_prev_kpts(bootstrapper.point_cloud, kpts)
         else:
-            
-            poseEstimator = PoseEstimation(self.K, self.point_cloud[:,0:3], kpts, use_KLT=self.useKLT, algo_method_type=AlgoMethod.P3P)
-        
-            
-            
-
-        matched_pointcloud, img_kpts = self.poseEstimator.match_key_points(
-            pointcloud, keypoints, descriptors, I1, I0)
-        M1 = self.poseEstimator.PnP(matched_pointcloud, img_kpts)
-        # Maybe np.linalg.inv(M[idx])
+            matched_pointcloud, img_kpts = self.poseEstimator.match_key_points(self.point_cloud, kpts, des, 
+                                                                               self.frame_queue[-1].img, 
+                                                                               self.frame_queue[-2].img)
+            M1 = self.poseEstimator.PnP(matched_pointcloud, img_kpts) 
+            # Maybe np.linalg.inv(M[idx])
 
     def _addNewLandmarks():
         pass

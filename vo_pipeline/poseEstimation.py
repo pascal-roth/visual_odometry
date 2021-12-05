@@ -6,7 +6,7 @@
 import cv2 as cv
 import numpy as np
 import enum
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.bootstrap import BootstrapInitializer
@@ -21,7 +21,11 @@ class AlgoMethod(enum.Enum):
 
 class PoseEstimation:
     
-    def __init__(self, K: np.ndarray, pointcloud: np.ndarray, first_kps: np.ndarray, use_KLT: bool, algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
+    def __init__(self, K: np.ndarray, 
+                 pointcloud: Optional[np.ndarray] = None, 
+                 first_kps: Optional[np.ndarray] = None, 
+                 use_KLT: bool = True, 
+                 algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
         self.K = K
         self.pointcloud = pointcloud
         self.prev_kpts = first_kps
@@ -40,10 +44,16 @@ class PoseEstimation:
         elif self.algo_method_type == AlgoMethod.AP3P:
             self.algo_method = cv.SOLVEPNP_AP3P
 
-    def update_pointcloud_and_kpts(self, pointcloud: np.ndarray, kps: np.ndarray):
-        self.pointcloud = pointcloud
-        self.prev_kpts = kps
+    def update_pointcloud_and_prev_kpts(self, pointcloud: np.ndarray, kps: np.ndarray) -> None:
+        self.update_pointcloud(pointcloud)
+        self.update_prev_kpts(kps)
     
+    def update_pointcloud(self, pointcloud: np.ndarray) -> None:
+        self.pointcloud = pointcloud
+    
+    def update_prev_kpts(self, kps: np.ndarray) -> None:
+        self.prev_kpts = kps
+
     def PnP(self, img_key_points: np.ndarray) -> np.ndarray:
         
         """
@@ -86,7 +96,7 @@ class PoseEstimation:
             pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(self.prev_kpts), None, maxLevel=params.KLT_NUM_PYRAMIDS)
             found = st == 1
             pts1 = pts1[found[:, 0]]
-            self.update_pointcloud_and_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
+            self.update_pointcloud_and_prev_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
 
         else:
             # Extract keypoints and descriptors from next image
@@ -103,7 +113,7 @@ class PoseEstimation:
             for i, match in enumerate(matches):
                 pts1[i, :] = kp1[match.trainIdx].pt
                 matched_pointcloud[i, :] = pointcloud[match.queryIdx, :]
-            self.update_pointcloud_and_kpts(matched_pointcloud, pts1)
+            self.update_pointcloud_and_prev_kpts(matched_pointcloud, pts1)
 
         return pts1
 
