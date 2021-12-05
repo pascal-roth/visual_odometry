@@ -8,6 +8,7 @@ from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
 from vo_pipeline.continuousVO import ContinuousVO
 import matplotlib.pyplot as plt
 from utils.matrix import *
+import matplotlib.animation as animation
 import numpy as np
 import cv2
 
@@ -146,7 +147,34 @@ def poseEstimation_example():
 def continuous_vo_example():
     dataset = DatasetLoader(DatasetType.KITTI).load()
     continuousVO = ContinuousVO(dataset)
-    continuousVO.run_pipeline()
+    continuousVO.step()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    sc_point_cloud = ax.scatter([], [], [], label="landmarks", alpha=0.1)
+    sc_ego = ax.scatter([], [], [], "*", color="red", label="$T_i$")
+    poses = []
+    title = ax.set_title("Reconstructed points, t=0")
+    def animate(i):
+        continuousVO.step()
+        if continuousVO.keypoint_trajectories.landmarks is not None:
+            point_cloud = np.array(continuousVO.keypoint_trajectories.landmarks)
+            pose_r = continuousVO.frame_queue[continuousVO.frames_to_skip].pose @  hom_inv(continuousVO.frame_queue[-1].pose)
+            poses.append(pose_r[:, 3])
+            p = np.array(poses)
+            sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            sc_point_cloud._offsets3d = (point_cloud[:, 0], point_cloud[:, 1], point_cloud[:, 2])
+            title.set_text(f"Reconstructed points, t={i}")
+
+    ani = animation.FuncAnimation(fig, animate)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    ax.set_xlim(-5, 5)
+    ax.set_ylim(-5, 5)
+    ax.set_zlim(-5, 20)
+    ax.legend()
+    plt.show()
+
 
 
 def main():

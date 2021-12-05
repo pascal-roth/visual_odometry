@@ -149,7 +149,7 @@ class KeypointTrajectories:
 
         for trajectory in self.on_frame[self.latest_frame - 1].values():
             # only triangulate trajectories lasting longer than 4 frames and it's not been triangulated before
-            if trajectory.final_idx - trajectory.init_idx < 4 or trajectory.traj_idx in self.traj2landmark:
+            if trajectory.final_idx - trajectory.init_idx < 6 or trajectory.traj_idx in self.traj2landmark:
                 continue
             # trajectory could not be tracked anymore
             # ==> triangulate resulting point
@@ -189,25 +189,19 @@ class ContinuousVO:
         self.last_keyframe_coords: np.ndarray
 
         self.keypoint_trajectories = KeypointTrajectories(self.dataset.K)
+        self.frame_idx = 0
 
-    def run_pipeline(self):
-        for i, D in enumerate(self.dataset.frames):
-            K, img = D
-            if i <= self.frames_to_skip:
-                self.K = K
-                self.frame_queue.append(FrameState(i, img, np.eye(4)))
-            else:
-                self._processFrame(i, img)
+    def step(self):
+        K, img = next(self.dataset.frames)
+        if self.frame_idx < self.frames_to_skip:
+            self.K = K
+            self.frame_queue.append(FrameState(self.frame_idx, img, np.eye(4)))
+        else:
+            self._processFrame(self.frame_idx, img)
+
+        self.frame_idx += 1  
 
     def _processFrame(self, idx: int, img: np.ndarray):
-        """
-        :param S0:          dictionary state of last frame: contains last frame's 
-                            'keypoints', 'landmarks', candidate keypoints 
-                            (current pose and initial pose) and initial poses
-        :param I0           past frame
-        :param I1           current frame
-        :return             tuple with state of the current frame and current pose
-        """
 
         keypoints, descriptors = self.descriptor.get_kp(img)
 
@@ -245,7 +239,7 @@ class ContinuousVO:
             prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints(
             )
             print(
-                f"tracked {prev_keypoints.shape[0]} keypoints from prev frame")
+                f"landmarks: {len([l for l in prev_landmarks if l is not None])}")
             new_keypoints = np.array([kp.pt for kp in keypoints],
                                      dtype=np.float32)
 
@@ -279,7 +273,7 @@ class ContinuousVO:
                 self.K,
                 distCoeffs=None,
                 flags=cv.SOLVEPNP_ITERATIVE)
-            assert success, "PNPRANSAC was not able to compute a pose from 2D - 3D correspondences"
+            assert success, "PNP RANSAC was not able to compute a pose from 2D - 3D correspondences"
 
             # Convert to homogeneous coordinates
             R, _ = cv.Rodrigues(rvec)
@@ -300,12 +294,12 @@ class ContinuousVO:
                     continue
                 self.keypoint_trajectories.add_pt(idx, tracked_pts[i], None, T)
 
-            print(
-                f"tracked {np.sum(status[:prev_keypoints.shape[0]])} old, {np.sum(status[prev_keypoints.shape[0]:])} new points to next frame"
-            )
-            print(
-                f"mean trajectory length on frame {idx}: {self.keypoint_trajectories.mean_trajectory_length()}"
-            )
+            # print(
+            #     f"tracked {np.sum(status[:prev_keypoints.shape[0]])} old, {np.sum(status[prev_keypoints.shape[0]:])} new points to next frame"
+            # )
+            # print(
+            #     f"mean trajectory length on frame {idx}: {self.keypoint_trajectories.mean_trajectory_length()}"
+            # )
 
             # matched_pointcloud, img_kpts = self.poseEstimator.match_key_points(
             #     self.point_cloud, keypoints, descriptors,
@@ -313,7 +307,7 @@ class ContinuousVO:
             # M1 = self.poseEstimator.PnP(matched_pointcloud, img_kpts)
 
             # save img to frame queue
-            self.frame_queue.append(FrameState(idx, img, np.eye(4)))
+            self.frame_queue.append(FrameState(idx, img, T))
 
     @staticmethod
     def get_baseline_uncertainty(T: np.ndarray,
