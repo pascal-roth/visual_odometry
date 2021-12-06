@@ -12,11 +12,13 @@ from vo_pipeline.frameState import FrameState
 from params import *
 from collections import defaultdict
 import cv2 as cv
+from scipy.spatial import KDTree
 
 import numpy as np
 
 
 class Trajectory:
+    # TODO: cleanup, see what is not relevant anymore, one file
     def __init__(self, traj_idx: int, init_idx: int, pt: np.ndarray,
                  des: np.ndarray, transform: np.ndarray, K: np.ndarray):
         self.traj_idx = traj_idx
@@ -51,7 +53,8 @@ class Trajectory:
 
 
 class KeypointTrajectories:
-    def __init__(self, K: np.ndarray, merge_threshold=2):
+    # TODO: cleanup, see what is not relevant anymore, one file
+    def __init__(self, K: np.ndarray, merge_threshold: int = 2):
         self.K = K
         self.landmarks: List[np.ndarray] = None
         self.merge_threshold = merge_threshold
@@ -95,8 +98,7 @@ class KeypointTrajectories:
         self._next_frame(frame_idx)
         return trajectory
 
-    def latest_keypoints(
-            self) -> Tuple[np.ndarray, List[Trajectory], List[np.ndarray]]:
+    def latest_keypoints(self) -> Tuple[np.ndarray, List[Trajectory], List[np.ndarray]]:
         keypoints = []
         trajectories = []
         landmarks = []
@@ -151,6 +153,8 @@ class KeypointTrajectories:
             # only triangulate trajectories lasting longer than 4 frames and it's not been triangulated before
             if trajectory.final_idx - trajectory.init_idx < 6 or trajectory.traj_idx in self.traj2landmark:
                 continue
+            # TODO: angle dependet when to add new keypoint
+            # TODO: change if condition, s.t. if cannot be tracked anymore and if baseline is good enogh add point
             # trajectory could not be tracked anymore
             # ==> triangulate resulting point
             pt = trajectory.triangulate_3d_point()
@@ -178,7 +182,6 @@ class ContinuousVO:
 
         # in-memory frame buffer
         self.frame_queue: List[FrameState] = []
-        self.point_cloud: List[np.ndarray] = None
         # camera calibration matrix
         self.K: np.ndarray = None
         # max point distance for bootstrapp algo
@@ -191,7 +194,7 @@ class ContinuousVO:
         self.keypoint_trajectories = KeypointTrajectories(self.dataset.K)
         self.frame_idx = 0
 
-    def step(self):
+    def step(self) -> None:
         K, img = next(self.dataset.frames)
         if self.frame_idx < self.frames_to_skip:
             self.K = K
@@ -201,19 +204,18 @@ class ContinuousVO:
 
         self.frame_idx += 1  
 
-    def _processFrame(self, idx: int, img: np.ndarray):
+    def _processFrame(self, idx: int, img: np.ndarray) -> None:
 
+        # obtain SIFT keypoints and descriptors
         keypoints, descriptors = self.descriptor.get_kp(img)
 
         # bootstrap initialization
         if self.keypoint_trajectories.landmarks is None:
             img1 = self.frame_queue[0].img
             img2 = img
-            bootstrapper = BootstrapInitializer(
-                img1, img2, self.K, max_point_dist=self.max_point_distance)
+            bootstrapper = BootstrapInitializer(img1, img2, self.K, max_point_dist=self.max_point_distance)
 
-            self.keypoint_trajectories.set_point_cloud(
-                list(bootstrapper.point_cloud[:, 0:3]))
+            self.keypoint_trajectories.set_point_cloud(list(bootstrapper.point_cloud[:, 0:3]))
             # self.poseEstimator.update_pointcloud_and_prev_kpts(
             #     self.point_cloud, keypoints)
             T = bootstrapper.T
@@ -223,9 +225,8 @@ class ContinuousVO:
 
             # initialize keypoint trajectories
             for i in range(bootstrapper.pts1.shape[0]):
-                trajectory = self.keypoint_trajectories.add_pt(
-                    0, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],
-                    np.eye(4))
+                trajectory = self.keypoint_trajectories.add_pt(0, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],
+                                                               np.eye(4))
                 self.keypoint_trajectories.tracked_to(
                     traj_idx=trajectory.traj_idx,
                     frame_idx=idx,
@@ -236,26 +237,21 @@ class ContinuousVO:
         else:
             # update keypoint trajectories
             prev_img = self.frame_queue[-1].img
-            prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints(
-            )
-            print(
-                f"landmarks: {len([l for l in prev_landmarks if l is not None])}")
-            new_keypoints = np.array([kp.pt for kp in keypoints],
-                                     dtype=np.float32)
+            prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints()
+            print(f"landmarks: {len([l for l in prev_landmarks if l is not None])}")
+            new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
 
-            def min_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-                n_pts, _ = a.shape
-                closest = np.zeros((n_pts), dtype=np.float32)
-                for i in range(n_pts):
-                    closest[i] = np.min(np.linalg.norm(a[i] - b, axis=1))
-                return closest
-
-            min_d = min_dist(new_keypoints, prev_keypoints)
-            new_keypoints = new_keypoints[min_d > 20]
+            # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
+            #  second match is closer than a certain distance and not discarge in general all features too close to
+            #  the keypoint in the previous frame
+            kpts_kd_tree = KDTree(prev_keypoints)
+            min_d, _ = kpts_kd_tree.query(new_keypoints)
+            new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
 
             to_track = np.vstack((prev_keypoints, new_keypoints))
             tracked_pts, status, err = cv.calcOpticalFlowPyrLK(
                 prev_img, img, to_track, None, maxLevel=KLT_NUM_PYRAMIDS)
+            # TODO: filter tracked pts with the highest err
 
             # determine transformation
             n_prev_pts, _ = prev_keypoints.shape
@@ -266,6 +262,7 @@ class ContinuousVO:
             img_pts = prev_keypoints[pts_mask]
             landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m ], dtype=np.float32)
 
+            # TODO: pose estimation will be with static methods only
             # Solve RANSAC P3P to extract rotation matrix and translation vector
             success, rvec, trans, inliers = cv.solvePnPRansac(
                 landmarks,
@@ -274,6 +271,8 @@ class ContinuousVO:
                 distCoeffs=None,
                 flags=cv.SOLVEPNP_ITERATIVE)
             assert success, "PNP RANSAC was not able to compute a pose from 2D - 3D correspondences"
+
+            # TODO: return here are inliers, only track inliers!!!!!
 
             # Convert to homogeneous coordinates
             R, _ = cv.Rodrigues(rvec)
