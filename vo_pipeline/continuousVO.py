@@ -1,165 +1,14 @@
-from typing import Tuple, List, Dict
-from utils.loadData import DatasetLoader, DatasetType
-from utils.matrix import skew, skew_3
-from vo_pipeline import bootstrap
+from typing import List
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
 from vo_pipeline.bootstrap import BootstrapInitializer
+from vo_pipeline.keypointTrajectory import KeypointTrajectories
 from utils.loadData import Dataset
-from queue import Queue
 from vo_pipeline.frameState import FrameState
-from params import *
-from collections import defaultdict
-import cv2 as cv
 from scipy.spatial import KDTree
 
 import numpy as np
-
-
-class Trajectory:
-    # TODO: cleanup, see what is not relevant anymore, one file
-    def __init__(self, traj_idx: int, init_idx: int, pt: np.ndarray,
-                 des: np.ndarray, transform: np.ndarray, K: np.ndarray):
-        self.traj_idx = traj_idx
-        self.init_idx = init_idx
-        self.init_point = pt
-        self.init_descriptor = des
-        self.init_transform = np.float32(transform)
-
-        self.final_idx: int = init_idx
-        self.final_point: np.ndarray = pt
-        self.final_descriptor: np.ndarray = des
-        self.final_transform: np.ndarray = np.float32(transform)
-        self.K = K
-
-    def tracked_to(self, idx: int, pt: np.ndarray, des: np.ndarray,
-                   transform: np.ndarray):
-        self.final_idx = idx
-        self.final_point = pt
-        self.final_descriptor = des
-        self.final_transform = np.float32(transform)
-
-    def triangulate_3d_point(self) -> np.ndarray:
-        M1 = self.K @ self.init_transform[0:3, 0:4]
-        M2 = self.K @ self.final_transform[0:3, 0:4]
-        A1 = skew_3(self.init_point[0], self.init_point[1], 1) @ M1
-        A2 = skew_3(self.final_point[0], self.final_point[1], 1) @ M2
-        A = np.vstack((A1, A2))
-        _, _, VT = np.linalg.svd(A, full_matrices=False)
-        P = VT.T[:, -1]
-        # homogenize 3d point
-        return P[0:3] / P[3]
-
-
-class KeypointTrajectories:
-    # TODO: cleanup, see what is not relevant anymore, one file
-    def __init__(self, K: np.ndarray, merge_threshold: int = 2):
-        self.K = K
-        self.landmarks: List[np.ndarray] = None
-        self.merge_threshold = merge_threshold
-        self.trajectories: Dict[int, Trajectory] = dict()
-        self._next_trajectory_idx = 0
-        self.on_frame: Dict[int, Dict[int, Trajectory]] = defaultdict(dict)
-        self.traj2landmark: Dict[int, int] = dict()
-        self.latest_frame = 0
-
-    def set_point_cloud(self, point_cloud: np.ndarray):
-        self.landmarks = point_cloud
-
-    def add_pt(self, frame_idx: int, pt: np.ndarray, des: np.ndarray,
-               transform: np.ndarray) -> Trajectory:
-        # if frame_idx not in self.on_frame:
-        trajectory, _ = self._create_trajectory(frame_idx, pt, des, transform)
-        return trajectory
-
-        # trajectory, dist = self._find_closest(frame_idx, pt)
-        # if dist <= self.merge_threshold:
-        #     trajectory.tracked_to(frame_idx, pt, des, transform)
-        #     self.on_frame[frame_idx][trajectory.traj_idx] = trajectory
-        #     return trajectory
-        # else:
-        # trajectory, _ = self._create_trajectory(frame_idx, pt, des,
-        #                                         transform)
-        # return trajectory
-
-    def tracked_to(self,
-                   traj_idx: int,
-                   frame_idx: int,
-                   pt: np.ndarray,
-                   des: np.ndarray,
-                   transform: np.ndarray,
-                   landmark_id=None) -> Trajectory:
-        trajectory = self.trajectories[traj_idx]
-        trajectory.tracked_to(frame_idx, pt, des, transform)
-        self.on_frame[frame_idx][traj_idx] = trajectory
-        if landmark_id is not None:
-            self.traj2landmark[traj_idx] = landmark_id
-        self._next_frame(frame_idx)
-        return trajectory
-
-    def latest_keypoints(self) -> Tuple[np.ndarray, List[Trajectory], List[np.ndarray]]:
-        keypoints = []
-        trajectories = []
-        landmarks = []
-        for trajectory in self.on_frame[self.latest_frame].values():
-            keypoints.append(trajectory.final_point)
-            trajectories.append(trajectory)
-            landmark = None
-            if trajectory.traj_idx in self.traj2landmark:
-                landmark = self.landmarks[self.traj2landmark[
-                    trajectory.traj_idx]]
-            landmarks.append(landmark)
-
-        return np.asarray(keypoints, dtype=np.float32), trajectories, landmarks
-
-    def mean_trajectory_length(self) -> float:
-        lengths = []
-        for traj in self.on_frame[self.latest_frame].values():
-            lengths.append(traj.final_idx - traj.init_idx)
-        return np.mean(lengths)
-
-    # def _find_closest(self, frame_idx: int,
-    #                   pt: np.ndarray) -> Tuple[Trajectory, float]:
-    #     min_dist = np.inf
-    #     closest = None
-    #     for traj in self.on_frame[frame_idx].values():
-    #         dist = np.linalg.norm(traj.final_point - pt)
-    #         if dist < min_dist:
-    #             min_dist = dist
-    #             closest = traj
-    #     return closest, float(min_dist)
-
-    def _create_trajectory(self, frame_idx: int, pt: np.ndarray,
-                           des: np.ndarray,
-                           transform: np.ndarray) -> Tuple[Trajectory, int]:
-        traj_idx = self._next_trajectory_idx
-        self._next_trajectory_idx += 1
-        trajectory = Trajectory(traj_idx, frame_idx, pt, des, transform,
-                                self.K)
-        self.trajectories[traj_idx] = trajectory
-        self.on_frame[frame_idx][traj_idx] = trajectory
-        self._next_frame(frame_idx)
-        return trajectory, traj_idx
-
-    def _next_frame(self, frame_idx: int):
-        if frame_idx <= self.latest_frame:
-            return
-        self.latest_frame = frame_idx
-        if self.latest_frame < 6:
-            return
-
-        for trajectory in self.on_frame[self.latest_frame - 1].values():
-            # only triangulate trajectories lasting longer than 4 frames and it's not been triangulated before
-            if trajectory.final_idx - trajectory.init_idx < 6 or trajectory.traj_idx in self.traj2landmark:
-                continue
-            # TODO: angle dependet when to add new keypoint
-            # TODO: change if condition, s.t. if cannot be tracked anymore and if baseline is good enogh add point
-            # trajectory could not be tracked anymore
-            # ==> triangulate resulting point
-            pt = trajectory.triangulate_3d_point()
-            self.traj2landmark[trajectory.traj_idx] = len(self.landmarks)
-            self.landmarks.append(pt)
 
 
 class ContinuousVO:
@@ -205,7 +54,6 @@ class ContinuousVO:
         self.frame_idx += 1  
 
     def _processFrame(self, idx: int, img: np.ndarray) -> None:
-
         # obtain SIFT keypoints and descriptors
         keypoints, descriptors = self.descriptor.get_kp(img)
 
@@ -260,12 +108,13 @@ class ContinuousVO:
             img_pts = prev_keypoints[pts_mask]
             landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m ], dtype=np.float32)
 
+            # TODO: why here P3P RANSAC with prev_keypoints and not the ones of the current image ?
             # Solve RANSAC P3P to extract rotation matrix and translation vector
             T, inliers = self.poseEstimator.PnP(landmarks, img_pts)
 
             # add previously tracked points
             for i in range(prev_keypoints.shape[0]):
-                if not status[i]:
+                if not status[i] and i in inliers:  # only use inliers
                     continue
                 trajectory = prev_trajectories[i]
                 self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
@@ -275,18 +124,6 @@ class ContinuousVO:
                 if not status[i]:
                     continue
                 self.keypoint_trajectories.add_pt(idx, tracked_pts[i], None, T)
-
-            # print(
-            #     f"tracked {np.sum(status[:prev_keypoints.shape[0]])} old, {np.sum(status[prev_keypoints.shape[0]:])} new points to next frame"
-            # )
-            # print(
-            #     f"mean trajectory length on frame {idx}: {self.keypoint_trajectories.mean_trajectory_length()}"
-            # )
-
-            # matched_pointcloud, img_kpts = self.poseEstimator.match_key_points(
-            #     self.point_cloud, keypoints, descriptors,
-            #     self.frame_queue[-1].img, self.frame_queue[-2].img)
-            # M1 = self.poseEstimator.PnP(matched_pointcloud, img_kpts)
 
             # save img to frame queue
             self.frame_queue.append(FrameState(idx, img, T))
