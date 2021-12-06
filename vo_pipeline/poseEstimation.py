@@ -13,6 +13,7 @@ from vo_pipeline.bootstrap import BootstrapInitializer
 from vo_pipeline.trackPoints import TrackPoints
 import params
 
+
 class AlgoMethod(enum.Enum):
     DEFAULT = 0,
     P3P = 1,
@@ -86,14 +87,7 @@ class PoseEstimation:
         """
 
         if self.use_KLT:
-            # Apply KLT tracking to get keypoints in img1
-            
-            # Solution from  exercise9
-            # pts1, mask = self.KLT_tracker.trackKLT(img0, img1, kp0)
-            # matched_pointcloud = pointcloud[mask]
-            
-            # Opencv KLT
-            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(self.prev_kpts), None, maxLevel=params.KLT_NUM_PYRAMIDS)
+            pts1, st = self.KLT(img0, img1, self.prev_kpts)
             found = st == 1
             pts1 = pts1[found[:, 0]]
             self.update_pointcloud_and_prev_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
@@ -117,20 +111,12 @@ class PoseEstimation:
 
         return pts1
 
-    def KLT(self, img0: np.ndarray, img1: np.ndarray):
-            # Apply KLT tracking to get keypoints in img1
-            
-            # Solution from  exercise9
-            # pts1, mask = self.KLT_tracker.trackKLT(img0, img1, kp0)
-            # matched_pointcloud = pointcloud[mask]
-            
-            # Opencv KLT
-            pts1, st, err = cv.calcOpticalFlowPyrLK(img0, img1, np.round(self.prev_kpts), None, maxLevel=params.KLT_NUM_PYRAMIDS)
-            found = st == 1
-            pts1 = pts1[found[:, 0]]
-            self.update_pointcloud_and_prev_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
-
-
-                
-
-
+    @staticmethod
+    def KLT(img0: np.ndarray, img1: np.ndarray, prev_kpts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Apply KLT tracking to get keypoints in img1
+        """
+        tracked_pts, status, err = cv.calcOpticalFlowPyrLK(img0, img1, np.float32(prev_kpts), None,
+                                                           maxLevel=params.KLT_NUM_PYRAMIDS)
+        # TODO: filter tracked pts with the highest err
+        return tracked_pts, status

@@ -249,9 +249,7 @@ class ContinuousVO:
             new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
 
             to_track = np.vstack((prev_keypoints, new_keypoints))
-            tracked_pts, status, err = cv.calcOpticalFlowPyrLK(
-                prev_img, img, to_track, None, maxLevel=KLT_NUM_PYRAMIDS)
-            # TODO: filter tracked pts with the highest err
+            tracked_pts, status = PoseEstimation.KLT(prev_img, img, to_track)
 
             # determine transformation
             n_prev_pts, _ = prev_keypoints.shape
