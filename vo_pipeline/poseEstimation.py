@@ -23,12 +23,10 @@ class AlgoMethod(enum.Enum):
 class PoseEstimation:
     
     def __init__(self, K: np.ndarray, 
-                 pointcloud: Optional[np.ndarray] = None, 
-                 first_kps: Optional[np.ndarray] = None, 
+                 first_kps: Optional[np.ndarray] = None,
                  use_KLT: bool = True, 
                  algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
         self.K = K
-        self.pointcloud = pointcloud
         self.prev_kpts = first_kps
         self.algo_method_type = algo_method_type
         self.algo_method: Callable
@@ -45,13 +43,6 @@ class PoseEstimation:
         elif self.algo_method_type == AlgoMethod.AP3P:
             self.algo_method = cv.SOLVEPNP_AP3P
 
-    def update_pointcloud_and_prev_kpts(self, pointcloud: np.ndarray, kps: np.ndarray) -> None:
-        self.update_pointcloud(pointcloud)
-        self.update_prev_kpts(kps)
-    
-    def update_pointcloud(self, pointcloud: np.ndarray) -> None:
-        self.pointcloud = pointcloud
-    
     def update_prev_kpts(self, kps: np.ndarray) -> None:
         self.prev_kpts = kps
 
@@ -76,7 +67,7 @@ class PoseEstimation:
         M[0:3, 3] = trans.ravel()
         return M, inliers
         
-    def match_key_points(self, pointcloud: np.ndarray, kp0: np.ndarray, des0: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> np.ndarray:
+    def match_key_points(self, pointcloud: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> np.ndarray:
 
         """
         :param pointcloud:          Initial pointlcoud
@@ -91,11 +82,12 @@ class PoseEstimation:
             pts1, st = self.KLT(img0, img1, self.prev_kpts)
             found = st == 1
             pts1 = pts1[found[:, 0]]
-            self.update_pointcloud_and_prev_kpts(self.pointcloud[found[:, 0], 0:3], pts1)
+            self.update_prev_kpts(pts1)
 
         else:
             # Extract keypoints and descriptors from next image
             descriptor = FeatureExtractor(ExtractorType.SIFT)
+            kp0, des0 = descriptor.get_kp(img0)
             kp1, des1 = descriptor.get_kp(img1)
             matches = self.matcher.match_descriptors(des0, des1)
 
@@ -108,7 +100,7 @@ class PoseEstimation:
             for i, match in enumerate(matches):
                 pts1[i, :] = kp1[match.trainIdx].pt
                 matched_pointcloud[i, :] = pointcloud[match.queryIdx, :]
-            self.update_pointcloud_and_prev_kpts(matched_pointcloud, pts1)
+            self.update_prev_kpts(pts1)
 
         return pts1
 
