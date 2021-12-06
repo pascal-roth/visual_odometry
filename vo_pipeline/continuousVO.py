@@ -44,89 +44,103 @@ class ContinuousVO:
         self.frame_idx = 0
 
     def step(self) -> None:
+        """
+        get the next frame and process it, i.e.
+        - for the first n frame, just add them to frame queue
+        - n-th frame pass to initialize point-cloud
+        - after n-th frame pass them to _process_frame
+        """
         K, img = next(self.dataset.frames)
         if self.frame_idx < self.frames_to_skip:
             self.K = K
             self.frame_queue.append(FrameState(self.frame_idx, img, np.eye(4)))
+        elif self.frame_idx == self.frames_to_skip:
+            self._init_trajectories(self.frame_idx, img)
         else:
-            self._processFrame(self.frame_idx, img)
+            self._process_frame(self.frame_idx, img)
 
-        self.frame_idx += 1  
+        self.frame_idx += 1
 
-    def _processFrame(self, idx: int, img: np.ndarray) -> None:
-        # obtain SIFT keypoints and descriptors
-        keypoints, descriptors = self.descriptor.get_kp(img)
-
+    def _init_trajectories(self, idx: int, img: np.ndarray) -> None:
+        """
+        init point-cloud and trajectories of those key-points found in the n-th image
+        """
         # bootstrap initialization
-        if self.keypoint_trajectories.landmarks is None:
-            img1 = self.frame_queue[0].img
-            img2 = img
-            bootstrapper = BootstrapInitializer(img1, img2, self.K, max_point_dist=self.max_point_distance)
+        img_init = self.frame_queue[0].img
+        bootstrapper = BootstrapInitializer(img_init, img, self.K, max_point_dist=self.max_point_distance)
 
-            self.keypoint_trajectories.set_point_cloud(list(bootstrapper.point_cloud[:, 0:3]))
-            # self.poseEstimator.update_pointcloud_and_prev_kpts(
-            #     self.point_cloud, keypoints)
-            T = bootstrapper.T
+        # set the point-cloud in the keypoint trajectory class (= only place where point-cloud is saved)
+        self.keypoint_trajectories.set_point_cloud(list(bootstrapper.point_cloud[:, 0:3]))
+        T = bootstrapper.T
 
-            # save img to frame queue
-            self.frame_queue.append(FrameState(idx, img, T))
+        # save img to frame queue
+        self.frame_queue.append(FrameState(idx, img, T))
 
-            # initialize keypoint trajectories
-            for i in range(bootstrapper.pts1.shape[0]):
-                trajectory = self.keypoint_trajectories.add_pt(0, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],
-                                                               np.eye(4))
-                self.keypoint_trajectories.tracked_to(
-                    traj_idx=trajectory.traj_idx,
-                    frame_idx=idx,
-                    pt=bootstrapper.pts2[i, 0:2],
-                    des=bootstrapper.pts_des2[i],
-                    transform=T,
-                    landmark_id=i)
-        else:
-            # update keypoint trajectories
-            prev_img = self.frame_queue[-1].img
-            prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints()
-            print(f"landmarks: {len([l for l in prev_landmarks if l is not None])}")
-            new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
+        # initialize keypoint trajectories
+        for i in range(bootstrapper.pts1.shape[0]):
+            trajectory = self.keypoint_trajectories.add_pt(0, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],
+                                                           np.eye(4))
+            self.keypoint_trajectories.tracked_to(traj_idx=trajectory.traj_idx,
+                                                  frame_idx=idx,
+                                                  pt=bootstrapper.pts2[i, 0:2],
+                                                  des=bootstrapper.pts_des2[i],
+                                                  transform=T,
+                                                  landmark_id=i)
 
-            # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
-            #  second match is closer than a certain distance and not discarge in general all features too close to
-            #  the keypoint in the previous frame
-            kpts_kd_tree = KDTree(prev_keypoints)
-            min_d, _ = kpts_kd_tree.query(new_keypoints)
-            new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
+    def _process_frame(self, idx: int, img: np.ndarray) -> None:
+        """
+        given pointcloud is used to determine the trajectories of the keypoints in the frames
+        """
+        # get keypoints of the previous frame
+        prev_img = self.frame_queue[-1].img
+        prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints()
+        print(f"landmarks: {len([l for l in prev_landmarks if l is not None])}")
 
-            to_track = np.vstack((prev_keypoints, new_keypoints))
-            tracked_pts, status = PoseEstimation.KLT(prev_img, img, to_track)
+        # obtain SIFT keypoints and descriptors of the current frame
+        keypoints, descriptors = self.descriptor.get_kp(img)
+        new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
 
-            # determine transformation
-            n_prev_pts, _ = prev_keypoints.shape
-            pts_mask = np.array([
-                True if status[i] and prev_landmarks[i] is not None else False
-                for i in range(n_prev_pts)
-            ])
-            img_pts = prev_keypoints[pts_mask]
-            landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m ], dtype=np.float32)
+        # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
+        #  second match is closer than a certain distance and not discarge in general all features too close to
+        #  the keypoint in the previous frame
+        kpts_kd_tree = KDTree(prev_keypoints)
+        min_d, _ = kpts_kd_tree.query(new_keypoints)
+        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
 
-            # TODO: why here P3P RANSAC with prev_keypoints and not the ones of the current image ?
-            # Solve RANSAC P3P to extract rotation matrix and translation vector
-            T, inliers = self.poseEstimator.PnP(landmarks, img_pts)
+        # TODO: why should be the new keypoints which you have found in img be tracked in img ??? I would say that just
+        #  prev_keypoints are tracked, the new keypoints are just important to init the trajectories later
+        to_track = np.vstack((prev_keypoints, new_keypoints))
+        tracked_pts, status = PoseEstimation.KLT(prev_img, img, to_track)
 
-            # add previously tracked points
-            for i in range(prev_keypoints.shape[0]):
-                if not status[i] and i in inliers:  # only use inliers
-                    continue
-                trajectory = prev_trajectories[i]
-                self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
-                                                      tracked_pts[i], None, T)
-            # add newly tracked points
-            for i in range(prev_keypoints.shape[0], tracked_pts.shape[0]):
-                if not status[i]:
-                    continue
-                self.keypoint_trajectories.add_pt(idx, tracked_pts[i], None, T)
+        # filter all previous keypoints that could not have been tracked in the image and remove the
+        # corresponding landmarks
+        n_prev_pts, _ = prev_keypoints.shape
+        pts_mask = np.array([
+            True if status[i] and prev_landmarks[i] is not None else False
+            for i in range(n_prev_pts)
+        ])
+        img_pts = prev_keypoints[pts_mask]
+        landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m], dtype=np.float32)
 
-            # save img to frame queue
-            self.frame_queue.append(FrameState(idx, img, T))
+        # TODO: why here P3P RANSAC with prev_keypoints and not the ones of the current image ?
+        # Solve RANSAC P3P to extract rotation matrix and translation vector
+        T, inliers = self.poseEstimator.PnP(landmarks, img_pts)
+
+        # add previously tracked points
+        for i in range(prev_keypoints.shape[0]):
+            if not status[i] and i in inliers:  # only use inliers
+                continue
+            trajectory = prev_trajectories[i]
+            self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
+                                                  tracked_pts[i], None, T)
+        # add newly tracked points
+        for i in range(prev_keypoints.shape[0], tracked_pts.shape[0]):
+            if not status[i]:
+                continue
+            self.keypoint_trajectories.add_pt(idx, tracked_pts[i], None, T)
+
+        # save img to frame queue
+        self.frame_queue.append(FrameState(idx, img, T))
 
     @staticmethod
     def get_baseline_uncertainty(T: np.ndarray,
