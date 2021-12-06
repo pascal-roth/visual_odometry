@@ -55,25 +55,26 @@ class PoseEstimation:
     def update_prev_kpts(self, kps: np.ndarray) -> None:
         self.prev_kpts = kps
 
-    def PnP(self, img_key_points: np.ndarray) -> np.ndarray:
-        
+    def PnP(self, pointcloud: np.ndarray, img_key_points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
         """
         :param img_key_points:      matched keypoints from current image
         :return                     M matrix
         """
         # Same number of keypoints
-        assert self.pointcloud.shape[0] == img_key_points.shape[0]
-        
-        # Solve RANSAC P3P to extract rotation matrix and translation vector 
-        success, rvec, trans, _ = cv.solvePnPRansac(self.pointcloud, img_key_points, self.K, distCoeffs=None, flags=self.algo_method)
-        assert success
-        
+        assert pointcloud.shape[0] == img_key_points.shape[0]
+
+        # Solve RANSAC P3P to extract rotation matrix and translation vector
+        success, rvec, trans, inliers = cv.solvePnPRansac(pointcloud, img_key_points, self.K, distCoeffs=None,
+                                                    flags=self.algo_method)
+        assert success, "PNP RANSAC was not able to compute a pose from 2D - 3D correspondences"
+
         # Convert to homogeneous coordinates
         R, _ = cv.Rodrigues(rvec)
         M = np.eye(4)
-        M[0:3, 0.3] = R
-        M[0:3, 3] = trans
-        return M
+        M[0:3, 0:3] = R
+        M[0:3, 3] = trans.ravel()
+        return M, inliers
         
     def match_key_points(self, pointcloud: np.ndarray, kp0: np.ndarray, des0: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> np.ndarray:
 

@@ -260,23 +260,8 @@ class ContinuousVO:
             img_pts = prev_keypoints[pts_mask]
             landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m ], dtype=np.float32)
 
-            # TODO: pose estimation will be with static methods only
             # Solve RANSAC P3P to extract rotation matrix and translation vector
-            success, rvec, trans, inliers = cv.solvePnPRansac(
-                landmarks,
-                img_pts,
-                self.K,
-                distCoeffs=None,
-                flags=cv.SOLVEPNP_ITERATIVE)
-            assert success, "PNP RANSAC was not able to compute a pose from 2D - 3D correspondences"
-
-            # TODO: return here are inliers, only track inliers!!!!!
-
-            # Convert to homogeneous coordinates
-            R, _ = cv.Rodrigues(rvec)
-            T = np.eye(4)
-            T[0:3, 0:3] = R
-            T[0:3, 3] = trans.ravel()
+            T, inliers = self.poseEstimator.PnP(landmarks, img_pts)
 
             # add previously tracked points
             for i in range(prev_keypoints.shape[0]):
