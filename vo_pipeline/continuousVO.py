@@ -133,7 +133,7 @@ class ContinuousVO:
 
 
         # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
-        #  second match is closer than a certain distance and not discarge in general all features too close to
+        #  second match is closer than a certain distance and not discharge in general all features too close to
         #  the keypoint in the previous frame
         kpts_kd_tree = KDTree(prev_keypoints)
         min_d, _ = kpts_kd_tree.query(new_keypoints)
