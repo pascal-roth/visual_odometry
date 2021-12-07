@@ -107,10 +107,8 @@ class ContinuousVO:
         min_d, _ = kpts_kd_tree.query(new_keypoints)
         new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
 
-        # TODO: why should be the new keypoints which you have found in img be tracked in img ??? I would say that just
         #  prev_keypoints are tracked, the new keypoints are just important to init the trajectories later
-        to_track = np.vstack((prev_keypoints, new_keypoints))
-        tracked_pts, status = PoseEstimation.KLT(prev_img, img, to_track)
+        tracked_pts, status = PoseEstimation.KLT(prev_img, img, prev_keypoints)
 
         # filter all previous keypoints that could not have been tracked in the image and remove the
         # corresponding landmarks
@@ -119,25 +117,29 @@ class ContinuousVO:
             True if status[i] and prev_landmarks[i] is not None else False
             for i in range(n_prev_pts)
         ])
-        img_pts = prev_keypoints[pts_mask]
+        img_pts = tracked_pts[pts_mask]
         landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m], dtype=np.float32)
 
-        # TODO: why here P3P RANSAC with prev_keypoints and not the ones of the current image ?
         # Solve RANSAC P3P to extract rotation matrix and translation vector
         T, inliers = self.poseEstimator.PnP(landmarks, img_pts)
 
         # add previously tracked points
         for i in range(prev_keypoints.shape[0]):
-            if not status[i] and i in inliers:  # only use inliers
+            # if trajectory is still tracked,
+            if status[i][0] == 1 and i in inliers:  # only use inliers  # TODO: imporve computational time with linear search, idx of inlier array
+                trajectory = prev_trajectories[i]
+                self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
+                                                      tracked_pts[i], None, T)
+            # if trajectory cannot be tracked  anymore
+            elif i in inliers:
+                trajectory = prev_trajectories[i]
+                self.keypoint_trajectories.tracked_until(trajectory.traj_idx, idx)
+            else:
                 continue
-            trajectory = prev_trajectories[i]
-            self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
-                                                  tracked_pts[i], None, T)
+
         # add newly tracked points
-        for i in range(prev_keypoints.shape[0], tracked_pts.shape[0]):
-            if not status[i]:
-                continue
-            self.keypoint_trajectories.add_pt(idx, tracked_pts[i], None, T)
+        for pt in keypoints:
+            self.keypoint_trajectories.add_pt(idx, pt, None, T)
 
         # save img to frame queue
         self.frame_queue.append(FrameState(idx, img, T))

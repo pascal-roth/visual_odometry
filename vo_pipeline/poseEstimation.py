@@ -111,5 +111,4 @@ class PoseEstimation:
         """
         tracked_pts, status, err = cv.calcOpticalFlowPyrLK(img0, img1, np.float32(prev_kpts), None,
                                                            maxLevel=params.KLT_NUM_PYRAMIDS)
-        # TODO: filter tracked pts with the highest err
         return tracked_pts, status

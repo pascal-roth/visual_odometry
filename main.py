@@ -1,4 +1,5 @@
 import copy
+import logging
 
 from utils.loadData import DatasetLoader, DatasetType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
@@ -154,6 +155,10 @@ def continuous_vo_example():
     sc_ego = ax.scatter([], [], [], "*", color="red", label="$T_i$")
     poses = []
     title = ax.set_title("Reconstructed points, t=0")
+
+    for i in range(10):
+        continuousVO.step()
+
     def animate(i):
         continuousVO.step()
         if continuousVO.keypoint_trajectories.landmarks is not None:
@@ -176,12 +181,12 @@ def continuous_vo_example():
     plt.show()
 
 
-
 def main():
     # matching_example()
     # bootstraping_example()
     # poseEstimation_example()
     continuous_vo_example()
+
 
 if __name__ == "__main__":
     main()

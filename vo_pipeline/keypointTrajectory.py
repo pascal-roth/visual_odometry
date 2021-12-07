@@ -6,7 +6,6 @@ from vo_pipeline.trajectory import Trajectory
 
 
 class KeypointTrajectories:
-    # TODO: cleanup, see what is not relevant anymore, one file
     def __init__(self, K: np.ndarray, merge_threshold: int = 2):
         self.K = K
         self.landmarks: List[np.ndarray] = None
@@ -22,7 +21,6 @@ class KeypointTrajectories:
 
     def add_pt(self, frame_idx: int, pt: np.ndarray, des: np.ndarray,
                transform: np.ndarray) -> Trajectory:
-        # if frame_idx not in self.on_frame:
         trajectory, _ = self._create_trajectory(frame_idx, pt, des, transform)
         return trajectory
 
@@ -43,13 +41,31 @@ class KeypointTrajectories:
                    des: np.ndarray,
                    transform: np.ndarray,
                    landmark_id=None) -> Trajectory:
+        """
+        function to call if trajectory can be tracked until the current frame
+        """
         trajectory = self.trajectories[traj_idx]
-        trajectory.tracked_to(frame_idx, pt, des, transform)
+        trajectory.tracked_to(frame_idx, pt, des, transform)  # TODO: change that
         self.on_frame[frame_idx][traj_idx] = trajectory
         if landmark_id is not None:
             self.traj2landmark[traj_idx] = landmark_id
-        self._next_frame(frame_idx)
+        # self._next_frame(frame_idx)
+        if frame_idx <= self.latest_frame:
+            self.latest_frame = frame_idx
         return trajectory
+
+    def tracked_until(self, traj_idx: int, frame_idx: int):
+        """
+        function to call if trajectory cannot be tracked until the current frame
+        """
+        trajectory = self.trajectories[traj_idx]
+        # assert trajectory.traj_idx not in self.traj2landmark
+        # TODO: change to baseline uncertanty
+        if not (trajectory.final_idx - trajectory.init_idx < 3 or trajectory.traj_idx not in self.traj2landmark):
+            pt = trajectory.triangulate_3d_point()
+            self.landmarks.append(pt)
+            self.traj2landmark[trajectory.traj_idx] = len(self.landmarks)
+            self._next_frame(frame_idx)
 
     def latest_keypoints(self) -> Tuple[np.ndarray, List[Trajectory], List[np.ndarray]]:
         keypoints = []
@@ -95,21 +111,6 @@ class KeypointTrajectories:
         self._next_frame(frame_idx)
         return trajectory, traj_idx
 
+    #  investigated that are not tracked anymore
     def _next_frame(self, frame_idx: int):
-        if frame_idx <= self.latest_frame:
-            return
-        self.latest_frame = frame_idx
-        if self.latest_frame < 6:
-            return
-
-        for trajectory in self.on_frame[self.latest_frame - 1].values():
-            # only triangulate trajectories lasting longer than 4 frames and it's not been triangulated before
-            if trajectory.final_idx - trajectory.init_idx < 6 or trajectory.traj_idx in self.traj2landmark:
-                continue
-            # TODO: angle dependet when to add new keypoint
-            # TODO: change if condition, s.t. if cannot be tracked anymore and if baseline is good enogh add point
-            # trajectory could not be tracked anymore
-            # ==> triangulate resulting point
-            pt = trajectory.triangulate_3d_point()
-            self.traj2landmark[trajectory.traj_idx] = len(self.landmarks)
-            self.landmarks.append(pt)
+        self.latest_frame = max(self.latest_frame, frame_idx)
