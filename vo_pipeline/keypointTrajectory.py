@@ -24,16 +24,6 @@ class KeypointTrajectories:
         trajectory, _ = self._create_trajectory(frame_idx, pt, des, transform)
         return trajectory
 
-        # trajectory, dist = self._find_closest(frame_idx, pt)
-        # if dist <= self.merge_threshold:
-        #     trajectory.tracked_to(frame_idx, pt, des, transform)
-        #     self.on_frame[frame_idx][trajectory.traj_idx] = trajectory
-        #     return trajectory
-        # else:
-        # trajectory, _ = self._create_trajectory(frame_idx, pt, des,
-        #                                         transform)
-        # return trajectory
-
     def tracked_to(self,
                    traj_idx: int,
                    frame_idx: int,
@@ -45,7 +35,8 @@ class KeypointTrajectories:
         function to call if trajectory can be tracked until the current frame
         """
         trajectory = self.trajectories[traj_idx]
-        trajectory.tracked_to(frame_idx, pt, des, transform)  # TODO: change that
+        trajectory.tracked_to(frame_idx, pt, des,
+                              transform)  # TODO: change that
         self.on_frame[frame_idx][traj_idx] = trajectory
         if landmark_id is not None:
             self.traj2landmark[traj_idx] = landmark_id
@@ -54,20 +45,8 @@ class KeypointTrajectories:
             self.latest_frame = frame_idx
         return trajectory
 
-    def tracked_until(self, traj_idx: int, frame_idx: int):
-        """
-        function to call if trajectory cannot be tracked until the current frame
-        """
-        trajectory = self.trajectories[traj_idx]
-        # assert trajectory.traj_idx not in self.traj2landmark
-        # TODO: change to baseline uncertanty
-        if not (trajectory.final_idx - trajectory.init_idx < 3 or trajectory.traj_idx not in self.traj2landmark):
-            pt = trajectory.triangulate_3d_point()
-            self.landmarks.append(pt)
-            self.traj2landmark[trajectory.traj_idx] = len(self.landmarks)
-            self._next_frame(frame_idx)
-
-    def latest_keypoints(self) -> Tuple[np.ndarray, List[Trajectory], List[np.ndarray]]:
+    def latest_keypoints(
+            self) -> Tuple[np.ndarray, List[Trajectory], List[np.ndarray]]:
         keypoints = []
         trajectories = []
         landmarks = []
@@ -88,17 +67,6 @@ class KeypointTrajectories:
             lengths.append(traj.final_idx - traj.init_idx)
         return np.mean(lengths)
 
-    # def _find_closest(self, frame_idx: int,
-    #                   pt: np.ndarray) -> Tuple[Trajectory, float]:
-    #     min_dist = np.inf
-    #     closest = None
-    #     for traj in self.on_frame[frame_idx].values():
-    #         dist = np.linalg.norm(traj.final_point - pt)
-    #         if dist < min_dist:
-    #             min_dist = dist
-    #             closest = traj
-    #     return closest, float(min_dist)
-
     def _create_trajectory(self, frame_idx: int, pt: np.ndarray,
                            des: np.ndarray,
                            transform: np.ndarray) -> Tuple[Trajectory, int]:
@@ -113,4 +81,19 @@ class KeypointTrajectories:
 
     #  investigated that are not tracked anymore
     def _next_frame(self, frame_idx: int):
-        self.latest_frame = max(self.latest_frame, frame_idx)
+        if frame_idx <= self.latest_frame:
+            return
+        self.latest_frame = frame_idx
+        if self.latest_frame < 6:
+            return
+
+        for trajectory in self.on_frame[self.latest_frame - 1].values():
+            frame_dist = 6
+            # only triangulate trajectories lasting longer than frame_dist frames and it's not been triangulated before
+            if trajectory.final_idx - trajectory.init_idx < frame_dist or trajectory.traj_idx in self.traj2landmark:
+                continue
+            # trajectory could not be tracked anymore
+            # ==> triangulate resulting point
+            pt = trajectory.triangulate_3d_point()
+            self.traj2landmark[trajectory.traj_idx] = len(self.landmarks)
+            self.landmarks.append(pt)

@@ -156,9 +156,6 @@ def continuous_vo_example():
     poses = []
     title = ax.set_title("Reconstructed points, t=0")
 
-    for i in range(10):
-        continuousVO.step()
-
     def animate(i):
         continuousVO.step()
         if continuousVO.keypoint_trajectories.landmarks is not None:

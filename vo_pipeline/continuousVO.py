@@ -94,18 +94,7 @@ class ContinuousVO:
         # get keypoints of the previous frame
         prev_img = self.frame_queue[-1].img
         prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints()
-        print(f"landmarks: {len([l for l in prev_landmarks if l is not None])}")
 
-        # obtain SIFT keypoints and descriptors of the current frame
-        keypoints, descriptors = self.descriptor.get_kp(img)
-        new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
-
-        # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
-        #  second match is closer than a certain distance and not discarge in general all features too close to
-        #  the keypoint in the previous frame
-        kpts_kd_tree = KDTree(prev_keypoints)
-        min_d, _ = kpts_kd_tree.query(new_keypoints)
-        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
 
         #  prev_keypoints are tracked, the new keypoints are just important to init the trajectories later
         tracked_pts, status = PoseEstimation.KLT(prev_img, img, prev_keypoints)
@@ -125,21 +114,32 @@ class ContinuousVO:
 
         # add previously tracked points
         for i in range(prev_keypoints.shape[0]):
-            # if trajectory is still tracked,
-            if status[i][0] == 1 and i in inliers:  # only use inliers  # TODO: imporve computational time with linear search, idx of inlier array
+            # if trajectory is trackable by KLT, continue it's trajectory
+            if status[i][0] == 1:  
                 trajectory = prev_trajectories[i]
                 self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
                                                       tracked_pts[i], None, T)
-            # if trajectory cannot be tracked  anymore
-            elif i in inliers:
-                trajectory = prev_trajectories[i]
-                self.keypoint_trajectories.tracked_until(trajectory.traj_idx, idx)
             else:
                 continue
 
+        # obtain SIFT keypoints and descriptors of the current frame
+        keypoints, descriptors = self.descriptor.get_kp(img)
+        new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
+
+        # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
+        #  second match is closer than a certain distance and not discarge in general all features too close to
+        #  the keypoint in the previous frame
+        kpts_kd_tree = KDTree(prev_keypoints)
+        min_d, _ = kpts_kd_tree.query(new_keypoints)
+        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
+
         # add newly tracked points
-        for pt in keypoints:
+        for pt in new_keypoints:
             self.keypoint_trajectories.add_pt(idx, pt, None, T)
+
+        num_landmarks = landmarks.shape[0]
+        inlier_ratio = inliers.shape[0] / img_pts.shape[0]
+        print(f"tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}")
 
         # save img to frame queue
         self.frame_queue.append(FrameState(idx, img, T))
