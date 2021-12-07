@@ -20,6 +20,18 @@ class KeypointTrajectories:
     def set_point_cloud(self, point_cloud: List[np.ndarray]):
         self.landmarks = point_cloud
 
+    def get_active_inactive(self):
+        active = []
+        inactive = []
+        landmark_idx = {self.traj2landmark[t.traj_idx] for t in self.on_frame[self.latest_frame].values() if t.traj_idx in self.traj2landmark}
+        for i, landmark in enumerate(self.landmarks):
+            if i in landmark_idx:
+                active.append(landmark)
+            else:
+                inactive.append(landmark)
+        return active, inactive
+
+
     def add_pt(self, frame_idx: int, pt: np.ndarray, des: np.ndarray,
                transform: np.ndarray) -> Trajectory:
         trajectory, _ = self._create_trajectory(frame_idx, pt, des, transform)
@@ -36,8 +48,10 @@ class KeypointTrajectories:
         function to call if trajectory can be tracked until the current frame
         """
         trajectory = self.trajectories[traj_idx]
-        # trajectory_length = trajectory.final_idx - trajectory.init_idx
-        # if trajectory_length > 25:
+        # T0 = hom_inv(trajectory.init_transform)
+        # T1 = hom_inv(transform)
+        # baseline = np.linalg.norm(T0[0:3, 3] - T1[0:3, 3])
+        # if baseline > 
         #     return None
         trajectory.tracked_to(frame_idx, pt, des, transform)  # TODO: change that
         self.on_frame[frame_idx][traj_idx] = trajectory
@@ -65,6 +79,8 @@ class KeypointTrajectories:
     def mean_trajectory_length(self) -> float:
         lengths = []
         for traj in self.on_frame[self.latest_frame].values():
+            if not traj.traj_idx in self.traj2landmark:
+                continue
             lengths.append(traj.final_idx - traj.init_idx)
         return np.mean(lengths)
 
@@ -88,7 +104,7 @@ class KeypointTrajectories:
         self.latest_frame = frame_idx
         if self.latest_frame < 6:
             return
-
+        # return 
         for trajectory in self.on_frame[self.latest_frame - 1].values():
             v1 = np.linalg.inv(self.K) @ np.array(list(trajectory.init_point) + [1])
             v2 = np.linalg.inv(self.K) @ np.array(list(trajectory.final_point) + [1])
@@ -100,7 +116,7 @@ class KeypointTrajectories:
             v2 = v2[0:3]
             angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
             angle = np.rad2deg(angle)
-            min_angle = 5
+            min_angle = 2
             large_baseline = angle > min_angle
             new_landmark = trajectory.traj_idx not in self.traj2landmark
             # only triangulate trajectories with large baseline and not triangulated before

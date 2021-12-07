@@ -151,7 +151,8 @@ def continuous_vo_example():
     continuousVO.step()
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    sc_point_cloud = ax.scatter([], [], [], label="landmarks", alpha=0.5)
+    sc_active = ax.scatter([], [], [])
+    sc_inactive = ax.scatter([], [], [], color="gray", alpha=0.25)
     sc_ego = ax.scatter([], [], [], "*", color="red", label="$T_i$")
     sc_gt = ax.scatter([], [], [], "*", color="green", label="$T^{gt}$")
     poses = []
@@ -160,8 +161,13 @@ def continuous_vo_example():
     def animate(i):
         continuousVO.step()
         if continuousVO.keypoint_trajectories.landmarks is not None:
-            point_cloud = np.array(continuousVO.keypoint_trajectories.landmarks)
-            sc_point_cloud._offsets3d = (point_cloud[:, 0], point_cloud[:, 1], point_cloud[:, 2])
+            active, inactive = continuousVO.keypoint_trajectories.get_active_inactive()
+            active = np.array(active)
+            inactive = np.array(inactive)
+            if active.size > 0:
+                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
+            if inactive.size > 0:
+                sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
 
             pose_r = hom_inv(continuousVO.frame_queue[-1].pose)
             poses.append(pose_r[0:3, 3])

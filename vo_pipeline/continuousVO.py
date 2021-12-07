@@ -19,7 +19,7 @@ class ContinuousVO:
                  matcherType=MatcherType.BF,
                  useKLT=True,
                  algo_method=AlgoMethod.P3P,
-                 max_point_distance: int = 50,
+                 max_point_distance: int = 20,
                  frames_to_skip: int = 4) -> None:
 
         self.dataset = dataset
@@ -132,7 +132,7 @@ class ContinuousVO:
         #  the keypoint in the previous frame
         kpts_kd_tree = KDTree(prev_keypoints)
         min_d, _ = kpts_kd_tree.query(new_keypoints)
-        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
+        new_keypoints = new_keypoints[min_d > 10]  # TODO: tunable parameter
 
         # add newly tracked points
         for pt in new_keypoints:
@@ -140,7 +140,7 @@ class ContinuousVO:
 
         num_landmarks = landmarks.shape[0]
         inlier_ratio = inliers.shape[0] / img_pts.shape[0]
-        print(f"tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}")
+        print(f"tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}, mean traj len: {self.keypoint_trajectories.mean_trajectory_length():.2f}")
 
         # save img to frame queue
         self.frame_queue.append(FrameState(idx, img, T))
