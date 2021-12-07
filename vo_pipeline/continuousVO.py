@@ -100,12 +100,6 @@ class ContinuousVO:
         keypoints, descriptors = self.descriptor.get_kp(img)
         new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
 
-        # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
-        #  second match is closer than a certain distance and not discarge in general all features too close to
-        #  the keypoint in the previous frame
-        kpts_kd_tree = KDTree(prev_keypoints)
-        min_d, _ = kpts_kd_tree.query(new_keypoints)
-        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
 
         #  prev_keypoints are tracked, the new keypoints are just important to init the trajectories later
         tracked_pts, status = PoseEstimation.KLT(prev_img, img, prev_keypoints)
@@ -137,8 +131,16 @@ class ContinuousVO:
             else:
                 continue
 
+
+        # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
+        #  second match is closer than a certain distance and not discarge in general all features too close to
+        #  the keypoint in the previous frame
+        kpts_kd_tree = KDTree(prev_keypoints)
+        min_d, _ = kpts_kd_tree.query(new_keypoints)
+        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
+
         # add newly tracked points
-        for pt in keypoints:
+        for pt in new_keypoints:
             self.keypoint_trajectories.add_pt(idx, pt, None, T)
 
         # save img to frame queue
