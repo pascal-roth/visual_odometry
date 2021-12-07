@@ -33,5 +33,11 @@ class Trajectory:
         A = np.vstack((A1, A2))
         _, _, VT = np.linalg.svd(A, full_matrices=False)
         P = VT.T[:, -1]
+
         # homogenize 3d point
-        return P[0:3] / P[3]
+        hom = P[0:3] / P[3]
+        # pt1 =  M1 @ P
+        # pt1 = pt1 / pt1[2]
+        # pt2 = M2 @ P
+        # pt2 = pt2 / pt2[2]
+        return hom

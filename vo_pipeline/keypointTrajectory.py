@@ -16,7 +16,7 @@ class KeypointTrajectories:
         self.traj2landmark: Dict[int, int] = dict()
         self.latest_frame = 0
 
-    def set_point_cloud(self, point_cloud: np.ndarray):
+    def set_point_cloud(self, point_cloud: List[np.ndarray]):
         self.landmarks = point_cloud
 
     def add_pt(self, frame_idx: int, pt: np.ndarray, des: np.ndarray,
@@ -35,14 +35,14 @@ class KeypointTrajectories:
         function to call if trajectory can be tracked until the current frame
         """
         trajectory = self.trajectories[traj_idx]
-        trajectory.tracked_to(frame_idx, pt, des,
-                              transform)  # TODO: change that
+        # trajectory_length = trajectory.final_idx - trajectory.init_idx
+        # if trajectory_length > 25:
+        #     return None
+        trajectory.tracked_to(frame_idx, pt, des, transform)  # TODO: change that
         self.on_frame[frame_idx][traj_idx] = trajectory
         if landmark_id is not None:
             self.traj2landmark[traj_idx] = landmark_id
-        # self._next_frame(frame_idx)
-        if frame_idx <= self.latest_frame:
-            self.latest_frame = frame_idx
+        self._next_frame(frame_idx)
         return trajectory
 
     def latest_keypoints(
@@ -78,6 +78,7 @@ class KeypointTrajectories:
         self.on_frame[frame_idx][traj_idx] = trajectory
         self._next_frame(frame_idx)
         return trajectory, traj_idx
+    
 
     #  investigated that are not tracked anymore
     def _next_frame(self, frame_idx: int):
@@ -88,12 +89,14 @@ class KeypointTrajectories:
             return
 
         for trajectory in self.on_frame[self.latest_frame - 1].values():
-            frame_dist = 6
-            # only triangulate trajectories lasting longer than frame_dist frames and it's not been triangulated before
-            if trajectory.final_idx - trajectory.init_idx < frame_dist or trajectory.traj_idx in self.traj2landmark:
+            frame_dist = 8
+            large_baseline = trajectory.final_idx - trajectory.init_idx > frame_dist
+            new_landmark = trajectory.traj_idx not in self.traj2landmark
+            # only triangulate trajectories with large baseline and not triangulated before
+            if not large_baseline or not new_landmark:
                 continue
-            # trajectory could not be tracked anymore
             # ==> triangulate resulting point
             pt = trajectory.triangulate_3d_point()
-            self.traj2landmark[trajectory.traj_idx] = len(self.landmarks)
+            landmark_id = len(self.landmarks)
+            self.traj2landmark[trajectory.traj_idx] = landmark_id
             self.landmarks.append(pt)

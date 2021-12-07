@@ -54,7 +54,7 @@ def bootstraping_example():
     R_C2_W = T[0:3, 0:3]
     T_C2_W = T[0:3, 3]
 
-    # CAUTION: to get t_i in world frame we need to invert the W -> C2 transformation T
+    # CAUTION: to get t_i in world frame we need to invert the W -> Ci transformation T
     t_i_W = -R_C2_W.T @ T_C2_W
     t_gt_W = dataset.T[i, 0:3, 3]
     R_gt_W = dataset.T[3, 0:3, 0:3]
@@ -151,7 +151,7 @@ def continuous_vo_example():
     continuousVO.step()
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    sc_point_cloud = ax.scatter([], [], [], label="landmarks", alpha=0.1)
+    sc_point_cloud = ax.scatter([], [], [], label="landmarks", alpha=0.5)
     sc_ego = ax.scatter([], [], [], "*", color="red", label="$T_i$")
     poses = []
     title = ax.set_title("Reconstructed points, t=0")
@@ -160,7 +160,7 @@ def continuous_vo_example():
         continuousVO.step()
         if continuousVO.keypoint_trajectories.landmarks is not None:
             point_cloud = np.array(continuousVO.keypoint_trajectories.landmarks)
-            pose_r = continuousVO.frame_queue[continuousVO.frames_to_skip].pose @  hom_inv(continuousVO.frame_queue[-1].pose)
+            pose_r = hom_inv(continuousVO.frame_queue[-1].pose)
             poses.append(pose_r[:, 3])
             p = np.array(poses)
             sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])

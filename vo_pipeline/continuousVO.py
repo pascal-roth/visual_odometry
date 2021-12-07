@@ -115,7 +115,7 @@ class ContinuousVO:
         # add previously tracked points
         for i in range(prev_keypoints.shape[0]):
             # if trajectory is trackable by KLT, continue it's trajectory
-            if status[i][0] == 1:  
+            if status[i][0] == 1: 
                 trajectory = prev_trajectories[i]
                 self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
                                                       tracked_pts[i], None, T)
