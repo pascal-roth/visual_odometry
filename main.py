@@ -153,6 +153,7 @@ def continuous_vo_example():
     ax = fig.add_subplot(111, projection="3d")
     sc_point_cloud = ax.scatter([], [], [], label="landmarks", alpha=0.5)
     sc_ego = ax.scatter([], [], [], "*", color="red", label="$T_i$")
+    sc_gt = ax.scatter([], [], [], "*", color="green", label="$T^{gt}$")
     poses = []
     title = ax.set_title("Reconstructed points, t=0")
 
@@ -160,11 +161,16 @@ def continuous_vo_example():
         continuousVO.step()
         if continuousVO.keypoint_trajectories.landmarks is not None:
             point_cloud = np.array(continuousVO.keypoint_trajectories.landmarks)
+            sc_point_cloud._offsets3d = (point_cloud[:, 0], point_cloud[:, 1], point_cloud[:, 2])
+
             pose_r = hom_inv(continuousVO.frame_queue[-1].pose)
-            poses.append(pose_r[:, 3])
+            poses.append(pose_r[0:3, 3])
             p = np.array(poses)
             sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
-            sc_point_cloud._offsets3d = (point_cloud[:, 0], point_cloud[:, 1], point_cloud[:, 2])
+
+            gt_scale = np.linalg.norm(poses[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
+            gt = gt_scale * dataset.T[:i, 0:3, 3]
+            sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
             title.set_text(f"Reconstructed points, t={i}")
 
     ani = animation.FuncAnimation(fig, animate)

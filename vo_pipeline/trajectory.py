@@ -1,5 +1,5 @@
 import numpy as np
-from utils.matrix import skew_3
+from utils.matrix import skew_3, hom_inv
 
 
 class Trajectory:

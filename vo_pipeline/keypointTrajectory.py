@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict, Tuple
 from collections import defaultdict
+from utils.matrix import hom_inv
 
 from vo_pipeline.trajectory import Trajectory
 
@@ -89,8 +90,18 @@ class KeypointTrajectories:
             return
 
         for trajectory in self.on_frame[self.latest_frame - 1].values():
-            frame_dist = 8
-            large_baseline = trajectory.final_idx - trajectory.init_idx > frame_dist
+            v1 = np.linalg.inv(self.K) @ np.array(list(trajectory.init_point) + [1])
+            v2 = np.linalg.inv(self.K) @ np.array(list(trajectory.final_point) + [1])
+            v1 = np.array(list(v1) + [1])
+            v2 = np.array(list(v2) + [1])
+            v1 = hom_inv(trajectory.init_transform) @ v1
+            v2 = hom_inv(trajectory.final_transform) @ v2
+            v1 = v1[0:3]
+            v2 = v2[0:3]
+            angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+            angle = np.rad2deg(angle)
+            min_angle = 5
+            large_baseline = angle > min_angle
             new_landmark = trajectory.traj_idx not in self.traj2landmark
             # only triangulate trajectories with large baseline and not triangulated before
             if not large_baseline or not new_landmark:
