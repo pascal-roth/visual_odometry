@@ -110,5 +110,5 @@ class PoseEstimation:
         Apply KLT tracking to get keypoints in img1
         """
         tracked_pts, status, err = cv.calcOpticalFlowPyrLK(img0, img1, np.float32(prev_kpts), None,
-                                                           maxLevel=params.KLT_NUM_PYRAMIDS)
+                                                           maxLevel=params.KLT_NUM_PYRAMIDS, minEigThreshold=1e-2)
         return tracked_pts, status

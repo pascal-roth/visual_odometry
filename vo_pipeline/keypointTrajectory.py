@@ -116,14 +116,20 @@ class KeypointTrajectories:
             v2 = v2[0:3]
             angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
             angle = np.rad2deg(angle)
-            min_angle = 2
+            min_angle = 3
             large_baseline = angle > min_angle
+            long_traj = trajectory.final_idx - trajectory.init_idx > 6
             new_landmark = trajectory.traj_idx not in self.traj2landmark
             # only triangulate trajectories with large baseline and not triangulated before
-            if not large_baseline or not new_landmark:
+            if not large_baseline or not new_landmark or not long_traj:
                 continue
             # ==> triangulate resulting point
             pt = trajectory.triangulate_3d_point()
+            t1 = hom_inv(trajectory.init_transform)[0:3, 3]
+            t2 = hom_inv(trajectory.final_transform)[0:3, 3]
+            d = min(np.linalg.norm(t1 - pt), np.linalg.norm(t2 - pt))
+            if d > 20:
+                continue
             landmark_id = len(self.landmarks)
             self.traj2landmark[trajectory.traj_idx] = landmark_id
             self.landmarks.append(pt)

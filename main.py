@@ -150,17 +150,21 @@ def continuous_vo_example():
     continuousVO = ContinuousVO(dataset)
     continuousVO.step()
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-    sc_active = ax.scatter([], [], [])
-    sc_inactive = ax.scatter([], [], [], color="gray", alpha=0.25)
-    sc_ego = ax.scatter([], [], [], "*", color="red", label="$T_i$")
-    sc_gt = ax.scatter([], [], [], "*", color="green", label="$T^{gt}$")
+    ax_3d = fig.add_subplot(121, projection="3d")
+    sc_active = ax_3d.scatter([], [], [])
+    sc_inactive = ax_3d.scatter([], [], [], color="gray", alpha=0.25)
+    sc_ego = ax_3d.scatter([], [], [], "*", color="red", label="$T_i$")
+    sc_gt = ax_3d.scatter([], [], [], "*", color="green", label="$T^{gt}$")
+
+    ax_img = fig.add_subplot(122)
+    sc_landmarks = ax_img.scatter([], [], s=.75, color="red", marker="*")
     poses = []
-    title = ax.set_title("Reconstructed points, t=0")
+    title = ax_3d.set_title("Reconstructed points, t=0")
 
     def animate(i):
         continuousVO.step()
         if continuousVO.keypoint_trajectories.landmarks is not None:
+            # plot 3D
             active, inactive = continuousVO.keypoint_trajectories.get_active_inactive()
             active = np.array(active)
             inactive = np.array(inactive)
@@ -177,16 +181,25 @@ def continuous_vo_example():
             gt_scale = np.linalg.norm(poses[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
             gt = gt_scale * dataset.T[:i, 0:3, 3]
             sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
+
+            # plot images
+            ax_img.imshow(continuousVO.frame_queue[-1].img)
+            M = continuousVO.K @ continuousVO.frame_queue[-1].pose[0:3, 0:4]
+            active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
+            img_pts = (M @ active_hom.T).T
+            img_pts = (img_pts.T / img_pts[:, 2]).T
+            sc_landmarks.set_offsets(img_pts[:, 0:2])
+
             title.set_text(f"Reconstructed points, t={i}")
 
     ani = animation.FuncAnimation(fig, animate)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    ax.set_xlim(-5, 5)
-    ax.set_ylim(-5, 5)
-    ax.set_zlim(-5, 20)
-    ax.legend()
+    ax_3d.set_xlabel("x")
+    ax_3d.set_ylabel("y")
+    ax_3d.set_zlabel("z")
+    ax_3d.set_xlim(-5, 5)
+    ax_3d.set_ylim(-5, 5)
+    ax_3d.set_zlim(-5, 20)
+    ax_3d.legend()
     plt.show()
 
 
