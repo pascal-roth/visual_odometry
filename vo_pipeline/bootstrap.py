@@ -67,13 +67,6 @@ class BootstrapInitializer:
     #             uncertainty = BootstrapInitializer.get_baseline_uncertainty(T, point_cloud)
     #             print(uncertainty)
 
-    @staticmethod
-    def get_baseline_uncertainty(T: np.ndarray, point_cloud: np.ndarray) -> float:
-        depths = point_cloud[:, 2]
-        mean_depth = np.mean(depths)
-        key_dist = np.linalg.norm(T[0:3, 3])
-        return float(key_dist / mean_depth)
-
     def _transform_matrix(self, F: np.ndarray, pts1: np.ndarray, pts2: np.ndarray) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -107,7 +100,7 @@ class BootstrapInitializer:
         point_cloud = None
         cam2_W = None
 
-        M1 = self.K @ np.eye(3, 4)
+        M1 = self.K @ np.eye(3, 4, dtype=np.float32)
         most_pts_in_front = -np.inf
         for R_hat in [R1, R2]:
             for u_hat in [-u, u]:
@@ -123,7 +116,7 @@ class BootstrapInitializer:
                     most_pts_in_front = num_in_font
                     cam2_W = -R_hat.T @ u_hat
 
-        T = np.eye(4)
+        T = np.eye(4, dtype=np.float32)
         T[0:3, 0:3] = R
         T[0:3, 3] = t.ravel()
         # filter point cloud for feasible points
@@ -171,11 +164,11 @@ class BootstrapInitializer:
 
         # 2D hom. matched points (num_matches, 3)
         num_matches = len(matches)
-        pts0 = np.ones((num_matches, 3))
-        pts1 = np.ones((num_matches, 3))
+        pts0 = np.ones((num_matches, 3), dtype=np.float32)
+        pts1 = np.ones((num_matches, 3), dtype=np.float32)
         # 128D feature vectors
-        pts_des0 = np.zeros((num_matches, 128))
-        pts_des1 = np.zeros((num_matches, 128))
+        pts_des0 = np.zeros((num_matches, 128), dtype=np.float32)
+        pts_des1 = np.zeros((num_matches, 128), dtype=np.float32)
         for i, match in enumerate(matches):
             pts0[i, 0:2] = kp0[match.queryIdx].pt
             pts1[i, 0:2] = kp1[match.trainIdx].pt
@@ -191,14 +184,13 @@ class BootstrapInitializer:
         # pts_des1 = pts1
 
         def normalize_pts(pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-            num_pts, _ = pts.shape
             mean = np.mean(pts[:, 0:2], axis=0)
             centered = pts[:, 0:2] - mean
             sigma = np.sqrt(np.mean(np.sum(centered ** 2, axis=1)))
             s = np.sqrt(2) / sigma
             T = np.array([[s, 0, -s * mean[0]],
                           [0, s, -s * mean[1]],
-                          [0, 0, 1]])
+                          [0, 0, 1]], dtype=np.float32)
             return (T @ pts.T).T, T
 
         # normalize pts for better numerical conditioning
@@ -237,4 +229,4 @@ class BootstrapInitializer:
     #     F = V[-1, :].reshape(3, 3).T
     #     u, s, v = np.linalg.svd(F)
     #     s[2] = 0
-    #     return u @ np.diag(s) @ v
+    #     return u @ np.diag(s) @ 

@@ -1,9 +1,15 @@
+import copy
+import logging
+
 from utils.loadData import DatasetLoader, DatasetType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
 from vo_pipeline.bootstrap import BootstrapInitializer
+from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
+from vo_pipeline.continuousVO import ContinuousVO
 import matplotlib.pyplot as plt
 from utils.matrix import *
+import matplotlib.animation as animation
 import numpy as np
 import logging
 import cv2
@@ -49,7 +55,7 @@ def bootstraping_example():
     R_C2_W = T[0:3, 0:3]
     T_C2_W = T[0:3, 3]
 
-    # CAUTION: to get t_i in world frame we need to invert the W -> C2 transformation T
+    # CAUTION: to get t_i in world frame we need to invert the W -> Ci transformation T
     t_i_W = -R_C2_W.T @ T_C2_W
     t_gt_W = dataset.T[i, 0:3, 3]
     R_gt_W = dataset.T[3, 0:3, 0:3]
@@ -77,10 +83,133 @@ def bootstraping_example():
     plt.show()
 
 
+
+def poseEstimation_example():
+    
+    dataset = DatasetLoader(DatasetType.KITTI).load()
+
+    M = []
+
+    _, img1 = next(dataset.frames)
+    next(dataset.frames)
+    next(dataset.frames)
+    next(dataset.frames)
+    K, img2 = next(dataset.frames)
+    i = 4
+
+
+    bootstrapper = BootstrapInitializer(img1, img2, K, max_point_dist=50)
+    pointcloud = bootstrapper.point_cloud
+    poseEstimator = PoseEstimation(K, pointcloud[:,0:3], bootstrapper.pts2[:, 0:2], use_KLT=True, algo_method_type=AlgoMethod.P3P)
+
+    # plot resulting point cloud
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    ax.scatter(pointcloud[:, 0], pointcloud[:, 1], pointcloud[:, 2], label="reconstructed points")
+    ax.scatter(0, 0, 0, "*", color="red", label="$t_0$")
+
+    def hom_inv(T):
+        I = np.zeros_like(T)
+        I[0:3, 0:3] = T[0:3, 0:3].T
+        I[0:3, 3] = -T[0:3, 0:3].T @ T[0:3, 3]
+        return I
+    
+    pose_init = hom_inv(bootstrapper.T)
+    t_act = pose_init[0:3, 3]
+    gt_scale = np.linalg.norm(t_act) / np.linalg.norm(dataset.T[i, 0:3, 3])
+    ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="yellow", label=f"$t_{4}$")
+    print(f"t_act: {t_act}")
+
+    prev_img_kpts = bootstrapper.pts2[:, 0:2]
+    prev_img = img2
+    for idx in range(15):
+
+        # extract feature in images
+        _, img = next(dataset.frames)
+        prev_img_kpts = poseEstimator.match_key_points(pointcloud[:, 0:3], prev_img_kpts, bootstrapper.pts_des2,
+                                                                      prev_img, img)
+        M.append(poseEstimator.PnP(prev_img_kpts))
+        prev_img = copy.copy(img)
+        # Maybe np.linalg.inv(M[idx])
+        pose = pose_init @ hom_inv(M[idx])
+        t_act = pose[:, 3]
+        ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="red")
+        t_gt = gt_scale * dataset.T[i + idx, 0:3, 3]
+        ax.scatter(t_gt[0], t_gt[1], t_gt[2], "*", color="green")
+        print(f"t_act: {t_act}")
+        
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    ax.legend()
+    plt.title("Reconstructed point cloud")
+    plt.show()
+
+
+def continuous_vo_example():
+    dataset = DatasetLoader(DatasetType.KITTI).load()
+    continuousVO = ContinuousVO(dataset)
+    continuousVO.step()
+    fig = plt.figure()
+    ax_3d = fig.add_subplot(121, projection="3d")
+    sc_active = ax_3d.scatter([], [], [])
+    sc_inactive = ax_3d.scatter([], [], [], color="gray", alpha=0.25)
+    sc_ego = ax_3d.scatter([], [], [], "*", color="red", label="$T_i$")
+    sc_gt = ax_3d.scatter([], [], [], "*", color="green", label="$T^{gt}$")
+
+    ax_img = fig.add_subplot(122)
+    sc_landmarks = ax_img.scatter([], [], s=.75, color="red", marker="*")
+    poses = []
+    title = ax_3d.set_title("Reconstructed points, t=0")
+
+    def animate(i):
+        continuousVO.step()
+        if continuousVO.keypoint_trajectories.landmarks is not None:
+            # plot 3D
+            active, inactive = continuousVO.keypoint_trajectories.get_active_inactive()
+            active = np.array(active)
+            inactive = np.array(inactive)
+            if active.size > 0:
+                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
+            if inactive.size > 0:
+                sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
+
+            pose_r = hom_inv(continuousVO.frame_queue[-1].pose)
+            poses.append(pose_r[0:3, 3])
+            p = np.array(poses)
+            sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+
+            gt_scale = np.linalg.norm(poses[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
+            gt = gt_scale * dataset.T[:i, 0:3, 3]
+            sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
+
+            # plot images
+            ax_img.imshow(continuousVO.frame_queue[-1].img)
+            M = continuousVO.K @ continuousVO.frame_queue[-1].pose[0:3, 0:4]
+            active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
+            img_pts = (M @ active_hom.T).T
+            img_pts = (img_pts.T / img_pts[:, 2]).T
+            sc_landmarks.set_offsets(img_pts[:, 0:2])
+
+            title.set_text(f"Reconstructed points, t={i}")
+
+    ani = animation.FuncAnimation(fig, animate)
+    ax_3d.set_xlabel("x")
+    ax_3d.set_ylabel("y")
+    ax_3d.set_zlabel("z")
+    ax_3d.set_xlim(-5, 5)
+    ax_3d.set_ylim(-5, 5)
+    ax_3d.set_zlim(-5, 20)
+    ax_3d.legend()
+    plt.show()
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     # matching_example()
-    bootstraping_example()
+    # bootstraping_example()
+    # poseEstimation_example()
+    continuous_vo_example()
 
 
 if __name__ == "__main__":
