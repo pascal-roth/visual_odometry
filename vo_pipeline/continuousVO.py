@@ -8,6 +8,7 @@ from vo_pipeline.keypointTrajectory import KeypointTrajectories
 from utils.loadData import Dataset
 from vo_pipeline.frameState import FrameState
 from scipy.spatial import KDTree
+import cv2 as cv
 
 import numpy as np
 
@@ -19,7 +20,7 @@ class ContinuousVO:
                  matcherType=MatcherType.BF,
                  useKLT=True,
                  algo_method=AlgoMethod.P3P,
-                 max_point_distance: int = 100,
+                 max_point_distance: int = 50,
                  frames_to_skip: int = 4) -> None:
 
         self.dataset = dataset
@@ -68,10 +69,12 @@ class ContinuousVO:
         """
         # bootstrap initialization
         img_init = self.frame_queue[0].img
-        bootstrapper = BootstrapInitializer(img_init, img, self.K, max_point_dist=self.max_point_distance)
+        bootstrapper = BootstrapInitializer(
+            img_init, img, self.K, max_point_dist=self.max_point_distance)
 
         # set the point-cloud in the keypoint trajectory class (= only place where point-cloud is saved)
-        self.keypoint_trajectories.set_point_cloud(list(bootstrapper.point_cloud[:, 0:3]))
+        self.keypoint_trajectories.set_point_cloud(
+            list(bootstrapper.point_cloud[:, 0:3]))
         T = bootstrapper.T
 
         # save img to frame queue
@@ -79,8 +82,9 @@ class ContinuousVO:
 
         # initialize keypoint trajectories
         for i in range(bootstrapper.pts1.shape[0]):
-            trajectory = self.keypoint_trajectories.add_pt(0, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],
-                                                           np.eye(4))
+            trajectory = self.keypoint_trajectories.add_pt(
+                0, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],
+                np.eye(4))
             self.keypoint_trajectories.tracked_to(traj_idx=trajectory.traj_idx,
                                                   frame_idx=idx,
                                                   pt=bootstrapper.pts2[i, 0:2],
@@ -94,8 +98,8 @@ class ContinuousVO:
         """
         # get keypoints of the previous frame
         prev_img = self.frame_queue[-1].img
-        prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints()
-
+        prev_keypoints, prev_trajectories, prev_landmarks = self.keypoint_trajectories.latest_keypoints(
+        )
 
         #  prev_keypoints are tracked, the new keypoints are just important to init the trajectories later
         tracked_pts, status = PoseEstimation.KLT(prev_img, img, prev_keypoints)
@@ -108,7 +112,9 @@ class ContinuousVO:
             for i in range(n_prev_pts)
         ])
         img_pts = tracked_pts[pts_mask]
-        landmarks = np.array([prev_landmarks[i] for i, m in enumerate(pts_mask) if m], dtype=np.float32)
+        landmarks = np.array(
+            [prev_landmarks[i] for i, m in enumerate(pts_mask) if m],
+            dtype=np.float32)
 
         # Solve RANSAC P3P to extract rotation matrix and translation vector
         T, inliers = self.poseEstimator.PnP(landmarks, img_pts)
@@ -116,31 +122,36 @@ class ContinuousVO:
         # add previously tracked points
         for i in range(prev_keypoints.shape[0]):
             # if trajectory is trackable by KLT, continue it's trajectory
-            if status[i][0] == 1: 
+            if status[i][0] == 1:
                 trajectory = prev_trajectories[i]
                 self.keypoint_trajectories.tracked_to(trajectory.traj_idx, idx,
                                                       tracked_pts[i], None, T)
             else:
                 continue
 
+        new_keypoints = FeatureExtractor.harris(img)
         # obtain SIFT keypoints and descriptors of the current frame
-        keypoints, descriptors = self.descriptor.get_kp(img)
-        new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
+        # keypoints, descriptors = self.descriptor.get_kp(img)
+        # new_keypoints = np.array([kp.pt for kp in keypoints], dtype=np.float32)
 
         # TODO: think about the method, maybe its best to match all keypoints and then discard the keypoints where
         #  second match is closer than a certain distance and not discarge in general all features too close to
         #  the keypoint in the previous frame
-        kpts_kd_tree = KDTree(prev_keypoints)
-        min_d, _ = kpts_kd_tree.query(new_keypoints)
-        new_keypoints = new_keypoints[min_d > 20]  # TODO: tunable parameter
+        # kpts_kd_tree = KDTree(prev_keypoints)
+        # min_d, _ = kpts_kd_tree.query(new_keypoints)
+        # new_keypoints = new_keypoints[min_d > 5]  # TODO: tunable parameter
 
         # add newly tracked points
         for pt in new_keypoints:
             self.keypoint_trajectories.add_pt(idx, pt, None, T)
 
+        new_landmarks = self.keypoint_trajectories.triangulate_landmarks(T)
+
         num_landmarks = landmarks.shape[0]
         inlier_ratio = inliers.shape[0] / img_pts.shape[0]
-        print(f"tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}, mean traj len: {self.keypoint_trajectories.mean_trajectory_length():.2f}")
+        print(
+            f"{idx}: tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}, new landmarks: {new_landmarks.shape[0]:>3}, mean traj len: {self.keypoint_trajectories.mean_trajectory_length():.2f}"
+        )
 
         # save img to frame queue
         self.frame_queue.append(FrameState(idx, img, T))

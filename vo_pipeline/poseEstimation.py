@@ -4,6 +4,7 @@
 
 # import packages
 import cv2 as cv
+from matplotlib.pyplot import flag
 import numpy as np
 import enum
 from typing import Callable, Tuple, Optional
@@ -21,23 +22,24 @@ class AlgoMethod(enum.Enum):
 
 
 class PoseEstimation:
-    
-    def __init__(self, K: np.ndarray, 
+    def __init__(self,
+                 K: np.ndarray,
                  first_kps: Optional[np.ndarray] = None,
-                 use_KLT: bool = True, 
+                 use_KLT: bool = True,
                  algo_method_type: AlgoMethod = AlgoMethod.DEFAULT):
         self.K = K
         self.prev_kpts = first_kps
         self.algo_method_type = algo_method_type
         self.algo_method: Callable
-        self.get_method()   
-        self.matcher = FeatureMatcher(MatcherType.FLANN, k=2) 
+        self.get_method()
+        self.matcher = FeatureMatcher(MatcherType.FLANN, k=2)
         self.use_KLT = use_KLT
-        self.KLT_tracker = TrackPoints(params.KLT_RADIUS, params.KLT_N_ITERS, params.KLT_LAMBDA)
-        
+        self.KLT_tracker = TrackPoints(params.KLT_RADIUS, params.KLT_N_ITERS,
+                                       params.KLT_LAMBDA)
+
     def get_method(self):
         if self.algo_method_type == AlgoMethod.DEFAULT:
-            self.algo_method = cv.SOLVEPNP_ITERATIVE()
+            self.algo_method = cv.SOLVEPNP_ITERATIVE
         elif self.algo_method_type == AlgoMethod.P3P:
             self.algo_method = cv.SOLVEPNP_P3P
         elif self.algo_method_type == AlgoMethod.AP3P:
@@ -46,8 +48,8 @@ class PoseEstimation:
     def update_prev_kpts(self, kps: np.ndarray) -> None:
         self.prev_kpts = kps
 
-    def PnP(self, pointcloud: np.ndarray, img_key_points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-
+    def PnP(self, pointcloud: np.ndarray,
+            img_key_points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         :param img_key_points:      matched keypoints from current image
         :return                     M matrix
@@ -56,8 +58,12 @@ class PoseEstimation:
         assert pointcloud.shape[0] == img_key_points.shape[0]
 
         # Solve RANSAC P3P to extract rotation matrix and translation vector
-        success, rvec, trans, inliers = cv.solvePnPRansac(pointcloud, img_key_points, self.K, distCoeffs=None,
-                                                    flags=self.algo_method)
+        success, rvec, trans, inliers = cv.solvePnPRansac(
+            pointcloud,
+            img_key_points,
+            self.K,
+            distCoeffs=None,
+            flags=self.algo_method)
         assert success, "PNP RANSAC was not able to compute a pose from 2D - 3D correspondences"
 
         # Convert to homogeneous coordinates
@@ -66,9 +72,9 @@ class PoseEstimation:
         M[0:3, 0:3] = R
         M[0:3, 3] = trans.ravel()
         return M, inliers
-        
-    def match_key_points(self, pointcloud: np.ndarray, img0: np.ndarray, img1: np.ndarray) -> np.ndarray:
 
+    def match_key_points(self, pointcloud: np.ndarray, img0: np.ndarray,
+                         img1: np.ndarray) -> np.ndarray:
         """
         :param pointcloud:          Initial pointlcoud
         :param kp0:                 keypoints from last keyframe
@@ -105,10 +111,19 @@ class PoseEstimation:
         return pts1
 
     @staticmethod
-    def KLT(img0: np.ndarray, img1: np.ndarray, prev_kpts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def KLT(img0: np.ndarray, img1: np.ndarray,
+            prev_kpts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Apply KLT tracking to get keypoints in img1
         """
-        tracked_pts, status, err = cv.calcOpticalFlowPyrLK(img0, img1, np.float32(prev_kpts), None,
-                                                           maxLevel=params.KLT_NUM_PYRAMIDS, minEigThreshold=1e-2)
+        tracked_pts, status, err = cv.calcOpticalFlowPyrLK(
+            img0,
+            img1,
+            np.float32(prev_kpts),
+            None,
+            winSize=(params.KLT_RADIUS, params.KLT_RADIUS),
+            maxLevel=params.KLT_NUM_PYRAMIDS,
+            minEigThreshold=params.KLT_MIN_EIGEN_THRESHOLD,
+            criteria=(cv.TermCriteria_COUNT | cv.TermCriteria_EPS, params.KLT_N_ITERS, 0.001),
+            flags=cv.OPTFLOW_LK_GET_MIN_EIGENVALS)
         return tracked_pts, status

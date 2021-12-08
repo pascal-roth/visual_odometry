@@ -147,18 +147,19 @@ def poseEstimation_example():
 
 
 def continuous_vo_example():
-    dataset = DatasetLoader(DatasetType.KITTI).load()
+    dataset = DatasetLoader(DatasetType.PARKING).load()
     continuousVO = ContinuousVO(dataset)
     continuousVO.step()
     fig = plt.figure()
     ax_3d = fig.add_subplot(121, projection="3d")
-    sc_active = ax_3d.scatter([], [], [])
-    sc_inactive = ax_3d.scatter([], [], [], color="gray", alpha=0.25)
+    sc_active = ax_3d.scatter([], [], [], label="active")
+    sc_inactive = ax_3d.scatter([], [], [], color="gray", alpha=0.25, label="inactive")
     sc_ego = ax_3d.scatter([], [], [], "*", color="red", label="$T_i$")
     sc_gt = ax_3d.scatter([], [], [], "*", color="green", label="$T^{gt}$")
 
     ax_img = fig.add_subplot(122)
-    sc_landmarks = ax_img.scatter([], [], s=.75, color="red", marker="*")
+    sc_landmarks = ax_img.scatter([], [], s=1, color="red", marker="*", label="landmarks")
+    sc_keypoints = ax_img.scatter([], [], s=0.5, color="yellow", marker="*", label="keypoints")
     poses = []
     title = ax_3d.set_title("Reconstructed points, t=0")
 
@@ -185,6 +186,9 @@ def continuous_vo_example():
 
             # plot images
             ax_img.imshow(continuousVO.frame_queue[-1].img)
+            # keypoints, _, _ = continuousVO.keypoint_trajectories.latest_keypoints()
+            # sc_keypoints.set_offsets(keypoints)
+
             M = continuousVO.K @ continuousVO.frame_queue[-1].pose[0:3, 0:4]
             active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
             img_pts = (M @ active_hom.T).T
@@ -201,6 +205,9 @@ def continuous_vo_example():
     ax_3d.set_ylim(-5, 5)
     ax_3d.set_zlim(-5, 20)
     ax_3d.legend()
+
+    ax_img.legend()
+    plt.tight_layout()
     plt.show()
 
 
