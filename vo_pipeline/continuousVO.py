@@ -145,12 +145,34 @@ class ContinuousVO:
         for pt in new_keypoints:
             self.keypoint_trajectories.add_pt(idx, pt, None, T)
 
-        new_landmarks = self.keypoint_trajectories.triangulate_landmarks(T)
+        # new_landmarks = self.keypoint_trajectories.triangulate_landmarks(T)
 
         num_landmarks = landmarks.shape[0]
         inlier_ratio = inliers.shape[0] / img_pts.shape[0]
+        if max(0, idx -self.frames_to_skip) % 10 == 0:
+            look_back = -5
+            frame_state = self.frame_queue[look_back]
+            prev_img = frame_state.img
+            bootstrapper = BootstrapInitializer(prev_img , img, self.K, max_point_dist=self.max_point_distance)
+            T = bootstrapper.T @ frame_state.pose
+            new_landmarks = (hom_inv(frame_state.pose) @ bootstrapper.point_cloud.T).T
+            for i in range(bootstrapper.pts1.shape[0]):
+                landmarks = self.keypoint_trajectories.landmarks
+                landmark_id = len(landmarks) 
+                landmarks.append(new_landmarks[i, 0:3])
+                trajectory = self.keypoint_trajectories.add_pt(
+                    idx + look_back, bootstrapper.pts1[i, 0:2], bootstrapper.pts_des1[i],T
+                    )
+                self.keypoint_trajectories.tracked_to(traj_idx=trajectory.traj_idx,
+                                                    frame_idx=idx,
+                                                    pt=bootstrapper.pts2[i, 0:2],
+                                                    des=bootstrapper.pts_des2[i],
+                                                    transform=T,
+                                                    landmark_id=landmark_id)
+
+
         print(
-            f"{idx}: tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}, new landmarks: {new_landmarks.shape[0]:>3}, mean traj len: {self.keypoint_trajectories.mean_trajectory_length():.2f}"
+            f"{idx}: tracked_landmarks: {num_landmarks:>5}, \ttracked_pts: {img_pts.shape[0]:>5}, \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}, mean traj len: {self.keypoint_trajectories.mean_trajectory_length():.2f}"
         )
 
         # save img to frame queue

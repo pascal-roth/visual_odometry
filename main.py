@@ -147,7 +147,7 @@ def poseEstimation_example():
 
 
 def continuous_vo_example():
-    dataset = DatasetLoader(DatasetType.PARKING).load()
+    dataset = DatasetLoader(DatasetType.KITTI).load()
     continuousVO = ContinuousVO(dataset)
     continuousVO.step()
     fig = plt.figure()
@@ -170,10 +170,10 @@ def continuous_vo_example():
             active, inactive = continuousVO.keypoint_trajectories.get_active_inactive()
             active = np.array(active)
             inactive = np.array(inactive)
-            if active.size > 0:
-                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
-            if inactive.size > 0:
-                sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
+            # if active.size > 0:
+            #     sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
+            # if inactive.size > 0:
+            #     sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
 
             pose_r = hom_inv(continuousVO.frame_queue[-1].pose)
             poses.append(pose_r[0:3, 3])
