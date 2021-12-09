@@ -1,8 +1,9 @@
 import cv2 as cv
-
 from scipy.optimize import least_squares
 from scipy.sparse import lil_matrix
 import numpy as np
+from typing import Tuple
+
 
 class BundleAdjustment:
 
@@ -28,7 +29,8 @@ class BundleAdjustment:
         """Convert 3-D points to 2-D by projecting onto images."""
         points_proj = self._rotate(points, camera_params[:, :3])
         points_proj += camera_params[:, 3:6]
-        points_proj  = self.K @ points_proj
+        points_proj  = self.K @ points_proj.T
+        points_proj = points_proj.T
         return points_proj[:, 0:2]
 
 
@@ -58,30 +60,43 @@ class BundleAdjustment:
 
         return A
 
-    def bundle_adjustment(self, M: np.ndarray, landmarks: np.ndarray, camera_indices: np.ndarray, point_indices: np.ndarray, num_observations: int, keypoints: np.ndarray):
+    def bundle_adjustment(self, M: np.ndarray, landmarks: np.ndarray, camera_indices: np.ndarray,
+                          point_indices: np.ndarray, keypoints: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         :param M: [num_observations, 3, 4] matrix containing the rotations and translations for each camera frame
         :param landmarks: 3D pointcloud
         :param camera_indices: contains the local frame indices for each observation
         :param point_indices: contains the local point indices for each observation
-        :param num_observations: number of observations
         :param keypoints: set of keypoints detected in frames
+
+        :return Tuple[adjusted landmarks of pointcloud [n_landmarks, 3], adjusted camera poses M]
         """
         # Number of landmarks for bundle adjustment
         n_points = landmarks.shape[0]
         # Here we save the translation and rotation vectors
-        camera_params = np.zeros(num_observations, 6)
+        num_frames = M.shape[0]
+        camera_params = np.zeros((num_frames, 6))
         camera_params[:, 3:6] = M[:, :, 3]
         # Transform from rot matrix to rot vector
-        for i in range(num_observations):
+        for i in range(num_frames):
             rot_vec, _ = cv.Rodrigues(M[i, :, :3])
             camera_params[i, :3] = rot_vec.ravel()
 
         x0 = np.hstack((camera_params.ravel(), landmarks.ravel()))
-        # f0 = self._fun(x0, num_observations, n_points, camera_indices, point_indices, keypoints)
-        A = self._bundle_adjustment_sparsity(num_observations, n_points, camera_indices, point_indices)
+        # f0 = self._fun(x0, num_frames, n_points, camera_indices, point_indices, keypoints)
+        A = self._bundle_adjustment_sparsity(num_frames, n_points, camera_indices, point_indices)
         res = least_squares(self._fun, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-4, method='trf',
-                    args=(num_observations, n_points, camera_indices, point_indices, keypoints))
+                    args=(num_frames, n_points, camera_indices, point_indices, keypoints))
 
-        return res
+        # Postprocessing of solution
+        adjusted_landmarks = res.x[camera_params.ravel().shape[0]:].reshape(landmarks.shape)
+        adjusted_rot_vec = res.x[:camera_params.ravel().shape[0]].reshape(camera_params.shape)[:, :3]
+        adjusted_trans = res.x[:camera_params.ravel().shape[0]].reshape(camera_params.shape)[:, 3:]
+        adjusted_M = np.zeros(M.shape)
+        adjusted_M[:, :, 3] = adjusted_trans
+        for i in range(num_frames):
+            R, _ = cv.Rodrigues(adjusted_rot_vec[i, :])
+            adjusted_M[i, :, :3] = R
+
+        return adjusted_M, adjusted_landmarks
 
