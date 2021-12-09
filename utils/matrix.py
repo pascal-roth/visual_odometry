@@ -36,3 +36,9 @@ def hom_inv(T:np.ndarray) -> np.ndarray:
     I[0:3, 0:3] = T[0:3, 0:3].T
     I[0:3, 3] = -T[0:3, 0:3].T @ T[0:3, 3]
     return I
+
+def to_hom(pts: np.ndarray) -> np.ndarray:
+    n_pts, dim = pts.shape
+    dtype = pts.dtype
+    ones = np.ones((n_pts, 1), dtype=dtype)
+    return np.hstack((pts, ones))

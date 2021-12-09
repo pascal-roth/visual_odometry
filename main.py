@@ -153,34 +153,38 @@ def continuous_vo_example():
     fig = plt.figure()
     ax_3d = fig.add_subplot(121, projection="3d")
     sc_active = ax_3d.scatter([], [], [], label="active")
-    sc_inactive = ax_3d.scatter([], [], [], color="gray", alpha=0.25, label="inactive")
-    sc_ego = ax_3d.scatter([], [], [], "*", color="red", label="$T_i$")
-    sc_gt = ax_3d.scatter([], [], [], "*", color="green", label="$T^{gt}$")
+    sc_ego = ax_3d.scatter([], [], [], color="green", label="$T_i$")
+    sc_ego_key = ax_3d.scatter([], [], [],  color="red", label="$T^{key}_i$", marker="*")
+    sc_gt = ax_3d.scatter([], [], [],  color="fuchsia", label="$T^{gt}$",marker="o")
 
     ax_img = fig.add_subplot(122)
     sc_landmarks = ax_img.scatter([], [], s=1, color="red", marker="*", label="landmarks")
     sc_keypoints = ax_img.scatter([], [], s=0.5, color="yellow", marker="*", label="keypoints")
     poses = []
+    keyframes = []
     title = ax_3d.set_title("Reconstructed points, t=0")
 
     def animate(i):
         continuousVO.step()
-        if continuousVO.keypoint_trajectories.landmarks is not None:
+        if len(continuousVO.keypoint_trajectories.landmarks) > 0:
             # plot 3D
-            active, inactive = continuousVO.keypoint_trajectories.get_active_inactive()
+            active = continuousVO.keypoint_trajectories.get_active()
             active = np.array(active)
-            inactive = np.array(inactive)
-            if active.size > 0:
-                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
-            if inactive.size > 0:
-                sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
+            # if active.size > 0:
+            #     sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
 
-            pose_r = hom_inv(continuousVO.frame_queue.get_head().pose)
-            poses.append(pose_r[0:3, 3])
-            p = np.array(poses)
-            sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            frame_state = continuousVO.frame_queue.get_head()
+            pose_r = hom_inv(frame_state.pose)
+            if frame_state.is_key:
+                keyframes.append(pose_r[0:3, 3])
+                p = np.array(keyframes)
+                sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            else: 
+                poses.append(pose_r[0:3, 3])
+                p = np.array(poses)
+                sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
 
-            gt_scale = np.linalg.norm(poses[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
+            gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
             gt = gt_scale * dataset.T[:i, 0:3, 3]
             sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
 

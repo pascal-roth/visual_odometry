@@ -14,20 +14,14 @@ class KeypointTrajectories:
         self.traj2landmark: Dict[int, int] = dict()
         self.latest_frame = 0
 
-    def get_active_inactive(self):
+    def get_active(self) -> List[np.ndarray]:
         active = []
-        inactive = []
-        landmark_idx = {
-            self.traj2landmark[t]
+        active = [
+            self.landmarks[self.traj2landmark[t]]
             for t in self.on_frame[self.latest_frame].keys()
             if t in self.traj2landmark
-        }
-        for i, landmark in enumerate(self.landmarks):
-            if i in landmark_idx:
-                active.append(landmark)
-            else:
-                inactive.append(landmark)
-        return active, inactive
+        ]
+        return active
 
     def tracked_to(self,
                    traj_idx: int,

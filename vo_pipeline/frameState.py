@@ -3,24 +3,13 @@ from typing import Dict
 
 
 class FrameState:
-    """
-    idx:            int
-    img:            np.ndarray
-    pose:           np.ndarray
-    keypoints:      np.ndarray          # 2 x N matrix
-    descriptors:    np.ndarray          # 16 x N matrix
-    pointcloud:     np.ndarray          # 3 x N matrix
-    candidate_C:    np.ndarray          # 2 x M matrix
-    candidate_F:    np.ndarray          # 2 x M matrix
-    initial_poses:  Tuple[np.ndarray]   # 12x M matrix
-    """
 
     def __init__(self,
                  idx: int,
                  img: np.ndarray,
                  pose: np.ndarray,
                  keypoints: np.ndarray = None,
-                 descriptors: np.ndarray = None):
+                 descriptors: np.ndarray = None, is_key=False):
         assert idx >= 0, "Frame index must be non-negative"
         self.idx = idx
         self.img = img
@@ -31,3 +20,4 @@ class FrameState:
         self.keypoints = keypoints
         self.descriptors = descriptors
         self.keypoints: Dict[int, np.ndarray] = dict()
+        self.is_key = is_key

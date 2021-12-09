@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from utils.matrix import hom_inv
+from utils.matrix import hom_inv, to_hom
 from utils.frameQueue import FrameQueue
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
@@ -8,7 +8,7 @@ from vo_pipeline.bootstrap import BootstrapInitializer
 from vo_pipeline.keypointTrajectory import KeypointTrajectories
 from utils.loadData import Dataset
 from vo_pipeline.frameState import FrameState
-from scipy.spatial import KDTree
+from params import *
 import cv2 as cv
 
 import numpy as np
@@ -80,7 +80,7 @@ class ContinuousVO:
         # bootstrap initialization
         baseline = self.frame_queue.get(self.frames_to_skip - 2)
         T = self._bootstrap(baseline, idx, img)
-        frame_state = FrameState(idx, img, T)
+        frame_state = FrameState(idx, img, T, is_key=True)
         self.frame_queue.add(frame_state)
         self._add_keyframe(frame_state)
 
@@ -128,28 +128,42 @@ class ContinuousVO:
         T, inliers = self.poseEstimator.PnP(tracked_landmarks, tracked_pts)
         inlier_ratio = inliers.shape[0] / tracked_pts.shape[0]
 
-        # add tracked points
-        trajectories = prev_trajectories[status]
-        for i, tracked_pt in enumerate(tracked_pts):
-            traj_idx = trajectories[i]
-            self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
-                                                  tracked_pt, T)
-
-        # sample new keypoints
-        new_keypoints = FeatureExtractor.harris(img)
-        # for pt in new_keypoints:
-        #     self.keypoint_trajectories.create_trajectory(frame_idx, pt, T)
-
-        if max(0, frame_idx - self.frames_to_skip) % 10 == 0:
+        is_key = False
+        baseline_uncertainty = self.baseline_uncertainty(self.keyframes[-1].pose, T, tracked_landmarks)
+        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY:
+            # bootstrap
+            is_key = True
             baseline = self.frame_queue.get(4)
             self._bootstrap(baseline, frame_idx, img)
-
+        else:
+            # add tracked points
+            trajectories = prev_trajectories[status]
+            for i, tracked_pt in enumerate(tracked_pts):
+                traj_idx = trajectories[i]
+                self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
+                                                    tracked_pt, T)
         print(
-            f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, , \tinlier_ratio: {inlier_ratio:.2f}, \tadded_pts: {new_keypoints.shape[0]:>5}, mean traj len: {self.keypoint_trajectories.mean_trajectory_length():.2f}"
+            f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
 
         # save img to frame queue
-        self.frame_queue.add(FrameState(frame_idx, img, T))
+        frame_state = FrameState(frame_idx, img, T, is_key=is_key)
+        self.frame_queue.add(frame_state)
+        if is_key:
+            self.keyframes.append(frame_state)
+    
+    def baseline_uncertainty(self, T0: np.ndarray, T1:np.ndarray,  landmarks: np.ndarray) -> float:
+        n_pts, _ = landmarks.shape
+        landmarks_hom = to_hom(landmarks)
+        # T_Ci<-W
+        landmark_init = (T0 @ landmarks_hom.T).T
+        T0_inv = hom_inv(T0)
+        T1_inv = hom_inv(T1)
+        init = T0_inv[0:3, 3]
+        final = T1_inv[0:3, 3]
+        dist = np.linalg.norm(final - init)
+        depth = np.mean(landmark_init[:, 2])
+        return float(dist / depth)
 
     @staticmethod
     def get_baseline_uncertainty(T: np.ndarray,
