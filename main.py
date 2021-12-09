@@ -160,8 +160,6 @@ def continuous_vo_example():
     ax_img = fig.add_subplot(122)
     sc_landmarks = ax_img.scatter([], [], s=1, color="red", marker="*", label="landmarks")
     sc_keypoints = ax_img.scatter([], [], s=0.5, color="yellow", marker="*", label="keypoints")
-    poses = []
-    keyframes = []
     title = ax_3d.set_title("Reconstructed points, t=0")
 
     def animate(i):
@@ -173,19 +171,12 @@ def continuous_vo_example():
             # if active.size > 0:
             #     sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
 
-            frame_state = continuousVO.frame_queue.get_head()
-            pose_r = hom_inv(frame_state.pose)
-            if frame_state.is_key:
-                keyframes.append(pose_r[0:3, 3])
-                p = np.array(keyframes)
-                sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
-            else: 
-                poses.append(pose_r[0:3, 3])
-                p = np.array(poses)
-                sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
+            # sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
 
-            gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
-            gt = gt_scale * dataset.T[:i, 0:3, 3]
+            # gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
+            gt = dataset.T[:i, 0:3, 3]
             sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
 
             # plot images

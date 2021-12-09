@@ -64,7 +64,7 @@ class KeypointTrajectories:
 
     def at_frame(
             self,
-            frame_idx: int) -> Tuple[np.ndarray, List[Trajectory], np.ndarray]:
+            frame_idx: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Keypoints with known landmarks in the latest frame
         
         Args:
@@ -76,10 +76,12 @@ class KeypointTrajectories:
         keypoints = []
         trajectories = []
         landmarks = []
-        assert frame_idx in self.on_frame, "frame_idx needs to have keypoints associated with it"
+        assert frame_idx in self.on_frame, f"frame_idx {frame_idx} needs to have keypoints associated with it"
         for trajectory in self.on_frame[frame_idx].values():
             if trajectory.traj_idx in self.traj2landmark:
-                keypoints.append(trajectory.final_point)
+                traj_frame_idx = frame_idx - trajectory.init_idx
+                assert 0 <= traj_frame_idx <= trajectory.final_idx - trajectory.init_idx
+                keypoints.append(trajectory.pts[traj_frame_idx])
                 trajectories.append(trajectory.traj_idx)
                 landmark = self.landmarks[self.traj2landmark[
                     trajectory.traj_idx]]

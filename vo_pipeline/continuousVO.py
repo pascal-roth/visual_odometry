@@ -8,6 +8,7 @@ from vo_pipeline.bootstrap import BootstrapInitializer
 from vo_pipeline.keypointTrajectory import KeypointTrajectories
 from utils.loadData import Dataset
 from vo_pipeline.frameState import FrameState
+from vo_pipeline.bundleAdjustment import BundleAdjustment
 from params import *
 import cv2 as cv
 
@@ -32,6 +33,7 @@ class ContinuousVO:
         self.poseEstimator = PoseEstimation(self.dataset.K,
                                             use_KLT=useKLT,
                                             algo_method_type=algo_method)
+        self.bundle_adjustment = BundleAdjustment(self.dataset.K)
 
         # in-memory frame buffer
         assert frame_queue_size > 0
@@ -86,6 +88,9 @@ class ContinuousVO:
 
     def _bootstrap(self, baseline: FrameState, frame_idx: int,
                    img: np.ndarray) -> np.ndarray:
+        if frame_idx in self.keypoint_trajectories.on_frame:
+            del self.keypoint_trajectories.on_frame[frame_idx]
+
         bootstrap = BootstrapInitializer(
             baseline.img, img, self.K, max_point_dist=self.max_point_distance)
         num_pts, _ = bootstrap.point_cloud.shape
@@ -128,20 +133,21 @@ class ContinuousVO:
         T, inliers = self.poseEstimator.PnP(tracked_landmarks, tracked_pts)
         inlier_ratio = inliers.shape[0] / tracked_pts.shape[0]
 
+        # add tracked points
+        trajectories = prev_trajectories[status]
+        for i, tracked_pt in enumerate(tracked_pts):
+            traj_idx = trajectories[i]
+            self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
+                                                  tracked_pt, T)
         is_key = False
-        baseline_uncertainty = self.baseline_uncertainty(self.keyframes[-1].pose, T, tracked_landmarks)
+        baseline_uncertainty = self._baseline_uncertainty(
+            self.keyframes[-1].pose, T, tracked_landmarks)
         if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY:
             # bootstrap
             is_key = True
+            self._bundle_adjustment(frame_idx, T)
             baseline = self.frame_queue.get(4)
             self._bootstrap(baseline, frame_idx, img)
-        else:
-            # add tracked points
-            trajectories = prev_trajectories[status]
-            for i, tracked_pt in enumerate(tracked_pts):
-                traj_idx = trajectories[i]
-                self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
-                                                    tracked_pt, T)
         print(
             f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
@@ -151,8 +157,9 @@ class ContinuousVO:
         self.frame_queue.add(frame_state)
         if is_key:
             self.keyframes.append(frame_state)
-    
-    def baseline_uncertainty(self, T0: np.ndarray, T1:np.ndarray,  landmarks: np.ndarray) -> float:
+
+    def _baseline_uncertainty(self, T0: np.ndarray, T1: np.ndarray,
+                              landmarks: np.ndarray) -> float:
         n_pts, _ = landmarks.shape
         landmarks_hom = to_hom(landmarks)
         # T_Ci<-W
@@ -164,6 +171,57 @@ class ContinuousVO:
         dist = np.linalg.norm(final - init)
         depth = np.mean(landmark_init[:, 2])
         return float(dist / depth)
+
+    def _bundle_adjustment(self, frame_idx: int, T):
+        prev_keyframe = self.keyframes[-1]
+        look_back = frame_idx - prev_keyframe.idx
+        poses: List[np.ndarray] = []
+        landmarks: List[np.ndarray] = []
+        keypoints = []
+        point_indices = []
+        camera_indices = []
+        traj2landmark = dict()
+
+        # fill pose_graph optimization lists
+        for i in range(look_back + 1):
+            old_frame_idx = frame_idx - look_back + i
+            if old_frame_idx == frame_idx:
+                pose = T
+            else:
+                frame_state = self.frame_queue.get(look_back - i - 1)
+                pose = frame_state.pose
+            poses.append(pose[0:3, 0:4])
+            kp, traj, lnd = self.keypoint_trajectories.at_frame(old_frame_idx)
+            if len(landmarks) == 0:
+                for j, traj_idx in enumerate(traj):
+                    landmark = self.keypoint_trajectories.landmarks[
+                        self.keypoint_trajectories.traj2landmark[traj_idx]]
+                    traj2landmark[traj_idx] = j
+                    landmarks.append(landmark)
+            keypoints += list(kp)
+            for traj_idx in traj:
+                point_indices.append(traj2landmark[traj_idx])
+                camera_indices.append(i)
+
+        # create numpy arrays
+        poses_np = np.asarray(poses, dtype=np.float32)
+        landmarks_np = np.asarray(landmarks, dtype=np.float32)
+        keypoints_np = np.asarray(keypoints, dtype=np.float32)
+        camera_indices_np = np.asarray(camera_indices)
+        point_indices_np = np.asarray(point_indices)
+        # run optimization
+        adjusted_poses, _ = self.bundle_adjustment.bundle_adjustment(
+            poses_np, landmarks_np, camera_indices_np, point_indices_np,
+            keypoints_np)
+
+        # update poses
+        for i in range(look_back):
+            frame_state = self.frame_queue.get(look_back - i - 1)
+            frame_state.pose = np.vstack(
+                (adjusted_poses[i], np.array([[0, 0, 0, 1]],
+                                             dtype=np.float32)))
+        return np.vstack((adjusted_poses[-1], np.array([[0, 0, 0, 1]],
+                                             dtype=np.float32)))
 
     @staticmethod
     def get_baseline_uncertainty(T: np.ndarray,

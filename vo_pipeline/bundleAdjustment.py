@@ -63,11 +63,11 @@ class BundleAdjustment:
     def bundle_adjustment(self, M: np.ndarray, landmarks: np.ndarray, camera_indices: np.ndarray,
                           point_indices: np.ndarray, keypoints: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
-        :param M: [num_observations, 3, 4] matrix containing the rotations and translations for each camera frame
+        :param M: [num_frames, 3, 4] matrix containing the rotations and translations for each camera frame
         :param landmarks: 3D pointcloud
-        :param camera_indices: contains the local frame indices for each observation
-        :param point_indices: contains the local point indices for each observation
-        :param keypoints: set of keypoints detected in frames
+        :param camera_indices: contains the local frame indices for each observation [num_frames * num_kp[i], 1] kp_idx -> frame_idx [0, num_frames - 1]
+        :param point_indices: contains the local point indices for each observation [num_frames * num_kp[i]] kp_imp -> landmark_idx
+        :param keypoints: set of keypoints detected in frames [num_frames * num_kp[i], 2]
 
         :return Tuple[adjusted landmarks of pointcloud [n_landmarks, 3], adjusted camera poses M]
         """
