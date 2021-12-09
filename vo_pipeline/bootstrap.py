@@ -133,7 +133,7 @@ class BootstrapInitializer:
         assert pts1.shape == pts2.shape, "The number of matched points in both images has to be the same"
         assert M1.shape == M2.shape == (3, 4), "Homogeneous projection matrices have be of shape (3,4)"
         n_pts, _ = pts1.shape
-        P = np.zeros((n_pts, 4))
+        P = np.zeros((n_pts, 4), dtype=np.float32)
         for i in range(n_pts):
             A1 = skew(pts1[i, :]) @ M1
             A2 = skew(pts2[i, :]) @ M2

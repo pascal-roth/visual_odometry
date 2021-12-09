@@ -170,12 +170,12 @@ def continuous_vo_example():
             active, inactive = continuousVO.keypoint_trajectories.get_active_inactive()
             active = np.array(active)
             inactive = np.array(inactive)
-            # if active.size > 0:
-            #     sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
-            # if inactive.size > 0:
-            #     sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
+            if active.size > 0:
+                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
+            if inactive.size > 0:
+                sc_inactive._offsets3d = (inactive[:, 0],inactive[:, 1],inactive[:, 2])
 
-            pose_r = hom_inv(continuousVO.frame_queue[-1].pose)
+            pose_r = hom_inv(continuousVO.frame_queue.get_head().pose)
             poses.append(pose_r[0:3, 3])
             p = np.array(poses)
             sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
@@ -185,15 +185,17 @@ def continuous_vo_example():
             sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
 
             # plot images
-            ax_img.imshow(continuousVO.frame_queue[-1].img)
-            # keypoints, _, _ = continuousVO.keypoint_trajectories.latest_keypoints()
-            # sc_keypoints.set_offsets(keypoints)
+            ax_img.imshow(continuousVO.frame_queue.get_head().img)
+            # keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
+            # if keypoints.size > 0:
+            #     sc_keypoints.set_offsets(keypoints)
 
-            M = continuousVO.K @ continuousVO.frame_queue[-1].pose[0:3, 0:4]
-            active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
-            img_pts = (M @ active_hom.T).T
-            img_pts = (img_pts.T / img_pts[:, 2]).T
-            sc_landmarks.set_offsets(img_pts[:, 0:2])
+            M = continuousVO.K @ continuousVO.frame_queue.get_head().pose[0:3, 0:4]
+            if active.size > 0:
+                active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
+                img_pts = (M @ active_hom.T).T
+                img_pts = (img_pts.T / img_pts[:, 2]).T
+                sc_landmarks.set_offsets(img_pts[:, 0:2])
 
             title.set_text(f"Reconstructed points, t={i}")
 
