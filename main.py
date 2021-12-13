@@ -15,6 +15,7 @@ import logging
 import cv2
 
 
+
 def matching_example():
     dataset = DatasetLoader(DatasetType.KITTI).load()
     # feature descriptor and matching algorithm
@@ -149,7 +150,7 @@ def poseEstimation_example():
 def continuous_vo_example():
     dataset = DatasetLoader(DatasetType.KITTI).load()
     continuousVO = ContinuousVO(dataset)
-    continuousVO.step()
+
     fig = plt.figure()
     ax_3d = fig.add_subplot(121, projection="3d")
     sc_active = ax_3d.scatter([], [], [], label="active")

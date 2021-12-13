@@ -3,6 +3,7 @@ from scipy.optimize import least_squares
 from scipy.sparse import lil_matrix
 import numpy as np
 from typing import Tuple
+import params
 
 
 class BundleAdjustment:
@@ -29,10 +30,9 @@ class BundleAdjustment:
         """Convert 3-D points to 2-D by projecting onto images."""
         points_proj = self._rotate(points, camera_params[:, :3])
         points_proj += camera_params[:, 3:6]
-        points_proj  = self.K @ points_proj.T
+        points_proj = self.K @ points_proj.T
         points_proj = points_proj.T
-        return points_proj[:, 0:2]
-
+        return points_proj[:, :2]/points_proj[:, 2, None]
 
     def _fun(self, params, n_frames, n_points, camera_indices, point_indices, points_2d):
         """Compute residuals.
@@ -71,6 +71,8 @@ class BundleAdjustment:
 
         :return Tuple[adjusted landmarks of pointcloud [n_landmarks, 3], adjusted camera poses M]
         """
+
+        keypoints, camera_indices, point_indices = self._preprocess_data(M, landmarks, camera_indices, point_indices, keypoints)
         # Number of landmarks for bundle adjustment
         n_points = landmarks.shape[0]
         # Here we save the translation and rotation vectors
@@ -85,8 +87,8 @@ class BundleAdjustment:
         x0 = np.hstack((camera_params.ravel(), landmarks.ravel()))
         # f0 = self._fun(x0, num_frames, n_points, camera_indices, point_indices, keypoints)
         A = self._bundle_adjustment_sparsity(num_frames, n_points, camera_indices, point_indices)
-        res = least_squares(self._fun, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-4, method='trf',
-                    args=(num_frames, n_points, camera_indices, point_indices, keypoints))
+        res = least_squares(self._fun, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-3, method='trf',
+                            args=(num_frames, n_points, camera_indices, point_indices, keypoints))
 
         # Postprocessing of solution
         adjusted_landmarks = res.x[camera_params.ravel().shape[0]:].reshape(landmarks.shape)
@@ -99,4 +101,35 @@ class BundleAdjustment:
             adjusted_M[i, :, :3] = R
 
         return adjusted_M, adjusted_landmarks
+
+    def _preprocess_data(self, M: np.ndarray, landmarks: np.ndarray, camera_indices: np.ndarray,
+                          point_indices: np.ndarray, keypoints: np.ndarray):
+        n_points = landmarks.shape[0]
+        # Here we save the translation and rotation vectors
+        num_frames = M.shape[0]
+        camera_params = np.zeros((num_frames, 6))
+        camera_params[:, 3:6] = M[:, :, 3]
+        # Transform from rot matrix to rot vector
+        for i in range(num_frames):
+            rot_vec, _ = cv.Rodrigues(M[i, :, :3])
+            camera_params[i, :3] = rot_vec.ravel()
+
+        x0 = np.hstack((camera_params.ravel(), landmarks.ravel()))
+
+        difference = self._fun(x0, num_frames, n_points, camera_indices, point_indices, keypoints)**2
+        difference = difference.reshape((int(difference.shape[0] / 2), 2))
+        difference = np.sum(difference, axis=1)
+        outliers = difference > params.BA_DISTANCE_TH
+
+        keypoints = np.delete(keypoints, outliers, axis=0)
+        point_indices = np.delete(point_indices, outliers, axis=0)
+        camera_indices = np.delete(camera_indices, outliers, axis=0)
+
+        return keypoints, camera_indices, point_indices
+
+
+
+
+
+
 
