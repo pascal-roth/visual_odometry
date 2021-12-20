@@ -50,13 +50,16 @@ class BundleAdjustment:
         A = lil_matrix((m, n), dtype=int)
 
         i = np.arange(camera_indices.size)
+
+        start_index = np.count_nonzero(camera_indices == 0)
+        # start_index = 0
         for s in range(6):
-            A[2 * i, camera_indices * 6 + s] = 1
-            A[2 * i + 1, camera_indices * 6 + s] = 1
+            A[2 * i[start_index:], camera_indices[start_index:] * 6 + s] = 1
+            A[2 * i[start_index:] + 1, camera_indices[start_index:] * 6 + s] = 1
 
         for s in range(3):
-            A[2 * i, n_cameras * 6 + point_indices * 3 + s] = 1
-            A[2 * i + 1, n_cameras * 6 + point_indices * 3 + s] = 1
+            A[2 * i[start_index:], n_cameras * 6 + point_indices[start_index:] * 3 + s] = 1
+            A[2 * i[start_index:] + 1, n_cameras * 6 + point_indices[start_index:] * 3 + s] = 1
 
         return A
 
@@ -87,7 +90,7 @@ class BundleAdjustment:
         x0 = np.hstack((camera_params.ravel(), landmarks.ravel()))
         # f0 = self._fun(x0, num_frames, n_points, camera_indices, point_indices, keypoints)
         A = self._bundle_adjustment_sparsity(num_frames, n_points, camera_indices, point_indices)
-        res = least_squares(self._fun, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-3, method='trf',
+        res = least_squares(self._fun, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-4, method='trf',
                             args=(num_frames, n_points, camera_indices, point_indices, keypoints))
 
         # Postprocessing of solution
