@@ -9,6 +9,7 @@ from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
 from vo_pipeline.continuousVO import ContinuousVO
 import matplotlib.pyplot as plt
 from utils.matrix import *
+from utils.plotter import plt_trajectory, plt_trajectory_landmarks
 import matplotlib.animation as animation
 import numpy as np
 import logging
@@ -84,9 +85,7 @@ def bootstraping_example():
     plt.show()
 
 
-
 def poseEstimation_example():
-    
     dataset = DatasetLoader(DatasetType.KITTI).load()
 
     M = []
@@ -149,64 +148,10 @@ def poseEstimation_example():
 
 def continuous_vo_example():
     dataset = DatasetLoader(DatasetType.KITTI).load()
-    continuousVO = ContinuousVO(dataset)
+    continuousVO = ContinuousVO(dataset, frame_queue_size=101)
 
-    fig = plt.figure()
-    ax_3d = fig.add_subplot(121, projection="3d")
-    sc_active = ax_3d.scatter([], [], [], label="active")
-    sc_ego = ax_3d.scatter([], [], [], color="green", label="$T_i$")
-    sc_ego_key = ax_3d.scatter([], [], [],  color="red", label="$T^{key}_i$", marker="*")
-    sc_gt = ax_3d.scatter([], [], [],  color="fuchsia", label="$T^{gt}$",marker="o")
-
-    ax_img = fig.add_subplot(122)
-    sc_landmarks = ax_img.scatter([], [], s=1, color="red", marker="*", label="landmarks")
-    sc_keypoints = ax_img.scatter([], [], s=0.5, color="yellow", marker="*", label="keypoints")
-    title = ax_3d.set_title("Reconstructed points, t=0")
-
-    def animate(i):
-        continuousVO.step()
-        if len(continuousVO.keypoint_trajectories.landmarks) > 0:
-            # plot 3D
-            active = continuousVO.keypoint_trajectories.get_active()
-            active = np.array(active)
-            # if active.size > 0:
-            #     sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
-
-            p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
-            # sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
-            sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
-
-            # gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
-            gt = dataset.T[:i, 0:3, 3]
-            sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
-
-            # plot images
-            ax_img.imshow(continuousVO.frame_queue.get_head().img)
-            # keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
-            # if keypoints.size > 0:
-            #     sc_keypoints.set_offsets(keypoints)
-
-            M = continuousVO.K @ continuousVO.frame_queue.get_head().pose[0:3, 0:4]
-            if active.size > 0:
-                active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
-                img_pts = (M @ active_hom.T).T
-                img_pts = (img_pts.T / img_pts[:, 2]).T
-                sc_landmarks.set_offsets(img_pts[:, 0:2])
-
-            title.set_text(f"Reconstructed points, t={i}")
-
-    ani = animation.FuncAnimation(fig, animate)
-    ax_3d.set_xlabel("x")
-    ax_3d.set_ylabel("y")
-    ax_3d.set_zlabel("z")
-    ax_3d.set_xlim(-5, 5)
-    ax_3d.set_ylim(-5, 5)
-    ax_3d.set_zlim(-5, 20)
-    ax_3d.legend()
-
-    ax_img.legend()
-    plt.tight_layout()
-    plt.show()
+    plt_trajectory(continuousVO, dataset)
+    # plt_trajectory_landmarks(continuousVO, dataset)
 
 
 def main():

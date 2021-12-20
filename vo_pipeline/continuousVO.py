@@ -52,6 +52,7 @@ class ContinuousVO:
         self.keypoint_trajectories = KeypointTrajectories()
 
         self.frame_idx = 0
+        self.bootstrap_idx: List[int] = []
 
     def step(self) -> None:
         """
@@ -148,6 +149,7 @@ class ContinuousVO:
             self._bundle_adjustment(frame_idx, T)
             baseline = self.frame_queue.get(4)
             self._bootstrap(baseline, frame_idx, img)
+            self.bootstrap_idx.append(frame_idx)
         print(
             f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
