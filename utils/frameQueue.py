@@ -1,50 +1,40 @@
-from typing import List
+from typing import List, Deque
 from vo_pipeline.frameState import FrameState
+from collections import deque
 
 
 class FrameQueue:
     """Ring buffer based on a python list """
     def __init__(self, size: int):
         assert size > 0
-        self.queue: List[FrameState] = [None] * size
-        self.head = -1
-        self.tail = 0
+        self.queue: List[FrameState] = []
         self.size = size
-        self._is_new = True
         self._i = -1
-        self._idx = -1
 
     @property
     def length(self) -> int:
-        if self.tail <= self.head:
-            return self.head - self.tail + 1
-        else:
-            return self.size - self.tail + self.head + 1
+        return len(self.queue)
 
 
     def add(self, frame_state: FrameState):
-        self.head = (self.head + 1) % self.size
-        self.tail = (
-            self.tail + 1
-        ) % self.size if self.head == self.tail and not self._is_new else self.tail
-        self._is_new = False
-        self.queue[self.head] = frame_state
+        self.queue.append(frame_state)
+        if len(self.queue) > self.size:
+            self.queue.pop(0)
 
     def get(self, idx: int):
         assert idx >= 0
-        return self.queue[self.head - idx]
+        return self.queue[len(self.queue) - idx - 1]
 
     def get_head(self) -> FrameState:
-        return self.queue[self.head]
+        return self.get(0)
 
     def __iter__(self):
         return self
 
     def __next__(self):
         self._i += 1
-        self._idx = (self.tail + self._i) % self.size
-        if (self._idx - 1) % self.size == self.head:
+        if self._i < len(self.queue):
+            return self.queue[self._i]
+        else:
             self._i = -1
-            self._idx = -1
             raise StopIteration()
-        return self.queue[self._idx]

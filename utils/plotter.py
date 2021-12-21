@@ -67,22 +67,24 @@ def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
     plt.show()
 
 
-def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset):
+def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset, plot_frame_indices=False):
     fig = plt.figure()
     ax_traj_pred = fig.add_subplot(221)
     ax_traj_true = fig.add_subplot(222)
     ax_err_scale = fig.add_subplot(223)
     ax_err_trans = fig.add_subplot(224)
 
-    IDX = 100
+    IDX = 1000
     OFFSET = 4
 
+    frame_states = []
     for i in range(IDX):  # range(len(dataset.T)):
-        continuousVO.step()
+        frame_state = continuousVO.step()
+        frame_states.append(frame_state)
 
     # get estimated and true poses
-    p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
-    frame_indices = np.array([state.idx for state in continuousVO.frame_queue])
+    p = np.array([hom_inv(k.pose)[0:3, 3] for k in frame_states])
+    frame_indices = np.array([state.idx for state in frame_states])
     p = p[OFFSET:IDX]
     frame_indices = frame_indices[OFFSET:IDX]
     gt = dataset.T[OFFSET:IDX, 0:3, 3]
@@ -97,11 +99,12 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset):
     # plot estimated trajectory and the points where we bootstrapped again
 
     ax_traj_pred.scatter(p[:, 0], p[:, 2], label="$T_p$", c=np.linspace(0, 1, p.shape[0]), cmap=cm.get_cmap("viridis"))
-    for i, pt in enumerate(p):
-        ax_traj_pred.text(pt[0], pt[2], f"{frame_indices[i]}")
+    if plot_frame_indices:
+        for i, pt in enumerate(p):
+            ax_traj_pred.text(pt[0], pt[2], f"{frame_indices[i]}")
 
-    bootstrap_x_idx = [x-4 for x in continuousVO.bootstrap_idx if x < IDX]
-    [ax_traj_pred.axvline(p[x_idx, 0]) for x_idx in bootstrap_x_idx]
+    bootstrap_x_idx = [x-OFFSET for x in continuousVO.bootstrap_idx if OFFSET <= x < IDX]
+    # [ax_traj_pred.axvline(p[x_idx, 0]) for x_idx in bootstrap_x_idx]
     ax_traj_pred.set_xlabel("x [m]")
     ax_traj_pred.set_ylabel("z [m]")
     #ax_traj_pred.set_xlim(x_min, x_max)
@@ -132,10 +135,10 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset):
         zyx = rot.as_euler('zyx', degrees=True)
         return zyx[0]
 
-    yaw_pred = np.array([_get_yaw_angle(hom_inv(k.pose)[0:3, 0:3]) for k in continuousVO.frame_queue])
+    yaw_pred = np.array([_get_yaw_angle(hom_inv(k.pose)[0:3, 0:3]) for k in frame_states])
     yaw_true = np.array([_get_yaw_angle(T_i[0:3, 0:3]) for T_i in dataset.T])
     yaw_true = yaw_true[OFFSET:IDX]
-    yaw_pred = yaw_pred[OFFSET:]
+    yaw_pred = yaw_pred[OFFSET:IDX]
 
     yaw_pred_inter = np.interp(p[:, 0], xp=gt[:, 0], fp=yaw_pred)
     ax_err_scale.plot(p[:, 0], yaw_pred_inter-yaw_true)
