@@ -42,3 +42,5 @@ def to_hom(pts: np.ndarray) -> np.ndarray:
     dtype = pts.dtype
     ones = np.ones((n_pts, 1), dtype=dtype)
     return np.hstack((pts, ones))
+
+# def to_hom_transform(rot: np.ndarray, trans: np.ndarray) -> np.ndarray:

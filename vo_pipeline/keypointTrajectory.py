@@ -100,7 +100,7 @@ class KeypointTrajectories:
         return np.mean(lengths)
 
     def create_trajectory(self, frame_idx: int, pt: np.ndarray,
-                          transform: np.ndarray) -> Tuple[Trajectory, int]:
+                          transform: np.ndarray, landmark_id:int = None) -> Tuple[Trajectory, int]:
         """Create a new trajectory
 
         Args:
@@ -115,6 +115,8 @@ class KeypointTrajectories:
         self._next_trajectory_idx += 1
         trajectory = Trajectory(traj_idx, frame_idx, pt, transform)
         self.trajectories[traj_idx] = trajectory
+        if landmark_id is not None:
+            self.traj2landmark[traj_idx] = landmark_id
         self.on_frame[frame_idx][traj_idx] = trajectory
         self._next_frame(frame_idx)
         return trajectory, traj_idx

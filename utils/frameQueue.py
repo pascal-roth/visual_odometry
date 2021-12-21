@@ -14,6 +14,14 @@ class FrameQueue:
         self._i = -1
         self._idx = -1
 
+    @property
+    def length(self) -> int:
+        if self.tail <= self.head:
+            return self.head - self.tail + 1
+        else:
+            return self.size - self.tail + self.head + 1
+
+
     def add(self, frame_state: FrameState):
         self.head = (self.head + 1) % self.size
         self.tail = (

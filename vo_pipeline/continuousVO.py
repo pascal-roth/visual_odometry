@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from utils.matrix import hom_inv, to_hom
 from utils.frameQueue import FrameQueue
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
@@ -54,13 +54,15 @@ class ContinuousVO:
         self.frame_idx = 0
         self.bootstrap_idx: List[int] = []
 
-    def step(self) -> None:
+    def step(self) -> int:
         """
         get the next frame and process it, i.e.
         - for the first n frame, just add them to frame queue
         - n-th frame pass to initialize point-cloud
         - after n-th frame pass them to _process_frame
+        :return: index of last reconstructed frame
         """
+
         K, img = next(self.dataset.frames)
         if self.frame_idx < self.frames_to_skip:
             self.K = K
@@ -70,8 +72,8 @@ class ContinuousVO:
             self._init_bootstrap(self.frame_idx, img)
         else:
             self._process_frame(self.frame_idx, img)
-
         self.frame_idx += 1
+        return self.frame_idx - 1
 
     def _add_keyframe(self, frame_state: FrameState):
         self.keyframes.append(frame_state)
@@ -81,14 +83,22 @@ class ContinuousVO:
         init point-cloud and trajectories of those key-points found in the n-th image
         """
         # bootstrap initialization
-        baseline = self.frame_queue.get(self.frames_to_skip - 2)
+        baseline = self.frame_queue.get(self.frames_to_skip - 1)
         T = self._bootstrap(baseline, idx, img)
         frame_state = FrameState(idx, img, T, is_key=True)
         self.frame_queue.add(frame_state)
         self._add_keyframe(frame_state)
 
     def _bootstrap(self, baseline: FrameState, frame_idx: int,
-                   img: np.ndarray) -> np.ndarray:
+                   img: np.ndarray, world_scale: float = 1) -> np.ndarray:
+        """
+
+        :param baseline:
+        :param frame_idx:
+        :param img:
+        :param world_scale:
+        :return: transform from baseline to img
+        """
         if frame_idx in self.keypoint_trajectories.on_frame:
             del self.keypoint_trajectories.on_frame[frame_idx]
 
@@ -96,18 +106,22 @@ class ContinuousVO:
             baseline.img, img, self.K, max_point_dist=self.max_point_distance)
         num_pts, _ = bootstrap.point_cloud.shape
         T = bootstrap.T @ baseline.pose
-        new_landmarks = (hom_inv(baseline.pose) @ bootstrap.point_cloud.T).T
 
+        # rescale T & landmarks to world scale
+        current_scale = np.linalg.norm(T[0:3, 3])
+        rescaling_factor = world_scale / current_scale
+        T[0:3, 3] *= rescaling_factor
+        landmarks = rescaling_factor * bootstrap.point_cloud
+
+        # transform landmarks to world frame
+        new_landmarks = (hom_inv(baseline.pose) @ landmarks.T).T
+
+        # initialize new trajectories
         for i in range(num_pts):
             landmark_id = len(self.keypoint_trajectories.landmarks)
             self.keypoint_trajectories.landmarks.append(new_landmarks[i, 0:3])
             trajectory, _ = self.keypoint_trajectories.create_trajectory(
-                baseline.idx, bootstrap.pts1[i, 0:2], baseline.pose)
-            self.keypoint_trajectories.tracked_to(traj_idx=trajectory.traj_idx,
-                                                  frame_idx=frame_idx,
-                                                  pt=bootstrap.pts2[i, 0:2],
-                                                  transform=T,
-                                                  landmark_id=landmark_id)
+                frame_idx=frame_idx, pt=bootstrap.pts2[i, 0:2], transform=T, landmark_id=landmark_id)
         return T
 
     def _optimal_baseline(self) -> Tuple[FrameState, int]:
@@ -141,18 +155,19 @@ class ContinuousVO:
             self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
                                                   tracked_pt, T)
         is_key = False
+        prev_keyframe = self.keyframes[-1]
         baseline_uncertainty = self._baseline_uncertainty(
-            self.keyframes[-1].pose, T, tracked_landmarks)
-        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY:
-            # bootstrap
-            is_key = True
-            self._bundle_adjustment(frame_idx, T)
-            baseline = self.frame_queue.get(4)
-            self._bootstrap(baseline, frame_idx, img)
-            self.bootstrap_idx.append(frame_idx)
+            prev_keyframe.pose, T, tracked_landmarks)
         print(
             f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
+        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY:
+            # bootstrap
+            is_key = True
+            transform_bundle_adjustment = self._bundle_adjustment(frame_idx, T, look_back=30)
+            world_scale = np.linalg.norm(transform_bundle_adjustment[0:3, 3])
+            T = self._bootstrap(prev_keyframe, frame_idx, img, world_scale=world_scale)
+            self.bootstrap_idx.append(frame_idx)
 
         # save img to frame queue
         frame_state = FrameState(frame_idx, img, T, is_key=is_key)
@@ -174,15 +189,16 @@ class ContinuousVO:
         depth = np.mean(landmark_init[:, 2])
         return float(dist / depth)
 
-    def _bundle_adjustment(self, frame_idx: int, T):
-        prev_keyframe = self.keyframes[-1]
-        look_back = frame_idx - prev_keyframe.idx
+    def _bundle_adjustment(self, frame_idx: int, T: np.ndarray, look_back: int):
         poses: List[np.ndarray] = []
         landmarks: List[np.ndarray] = []
-        keypoints = []
-        point_indices = []
-        camera_indices = []
-        traj2landmark = dict()
+        prev_keyframe = self.keyframes[-1]
+        look_back = frame_idx - prev_keyframe.idx
+        # look_back = min(min(self.keypoint_trajectories.on_frame.keys()), look_back)
+        keypoints: List[np.ndarray] = []
+        point_indices: List[int] = []
+        camera_indices: List[int] = []
+        traj2landmark: Dict[int, int] = dict()
 
         # fill pose_graph optimization lists
         for i in range(look_back + 1):
@@ -194,14 +210,15 @@ class ContinuousVO:
                 pose = frame_state.pose
             poses.append(pose[0:3, 0:4])
             kp, traj, lnd = self.keypoint_trajectories.at_frame(old_frame_idx)
-            if len(landmarks) == 0:
-                for j, traj_idx in enumerate(traj):
-                    landmark = self.keypoint_trajectories.landmarks[
-                        self.keypoint_trajectories.traj2landmark[traj_idx]]
-                    traj2landmark[traj_idx] = j
-                    landmarks.append(landmark)
+
             keypoints += list(kp)
             for traj_idx in traj:
+                if traj_idx not in traj2landmark:
+                    landmark = self.keypoint_trajectories.landmarks[
+                        self.keypoint_trajectories.traj2landmark[traj_idx]]
+                    traj2landmark[traj_idx] = len(landmarks)
+                    landmarks.append(landmark)
+
                 point_indices.append(traj2landmark[traj_idx])
                 camera_indices.append(i)
 
@@ -216,14 +233,14 @@ class ContinuousVO:
             poses_np, landmarks_np, camera_indices_np, point_indices_np,
             keypoints_np)
 
-        # update poses
+        # update poses for already tracked frames
         for i in range(look_back):
             frame_state = self.frame_queue.get(look_back - i - 1)
             frame_state.pose = np.vstack(
                 (adjusted_poses[i], np.array([[0, 0, 0, 1]],
                                              dtype=np.float32)))
         return np.vstack((adjusted_poses[-1], np.array([[0, 0, 0, 1]],
-                                             dtype=np.float32)))
+                                                       dtype=np.float32)))
 
     @staticmethod
     def get_baseline_uncertainty(T: np.ndarray,

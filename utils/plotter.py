@@ -5,6 +5,7 @@ from utils.matrix import *
 import matplotlib.animation as animation
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import matplotlib.cm as cm
 
 
 def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
@@ -81,7 +82,9 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset):
 
     # get estimated and true poses
     p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
+    frame_indices = np.array([state.idx for state in continuousVO.frame_queue])
     p = p[OFFSET:IDX]
+    frame_indices = frame_indices[OFFSET:IDX]
     gt = dataset.T[OFFSET:IDX, 0:3, 3]
 
     gt_max, gt_min = np.max(gt, axis=0), np.min(gt, axis=0)
@@ -92,7 +95,11 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset):
     z_min = np.min([p_min[2], gt_min[2]])
 
     # plot estimated trajectory and the points where we bootstrapped again
-    ax_traj_pred.scatter(p[:, 0], p[:, 2], color="red", label="$T_p$")
+
+    ax_traj_pred.scatter(p[:, 0], p[:, 2], label="$T_p$", c=np.linspace(0, 1, p.shape[0]), cmap=cm.get_cmap("viridis"))
+    for i, pt in enumerate(p):
+        ax_traj_pred.text(pt[0], pt[2], f"{frame_indices[i]}")
+
     bootstrap_x_idx = [x-4 for x in continuousVO.bootstrap_idx if x < IDX]
     [ax_traj_pred.axvline(p[x_idx, 0]) for x_idx in bootstrap_x_idx]
     ax_traj_pred.set_xlabel("x [m]")
@@ -103,7 +110,7 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset):
     ax_traj_pred.legend()
 
     # plot true trajectory
-    ax_traj_true.scatter(gt[:, 0], gt[:, 2], color="green", label="$T_t$")
+    ax_traj_true.scatter(gt[:, 0], gt[:, 2], label="$T_t$", c=np.linspace(0, 1, gt.shape[0]), cmap=cm.get_cmap("viridis"))
     ax_traj_true.set_xlabel("x [m]")
     ax_traj_true.set_ylabel("z [m]")
     ax_traj_true.set_xlim(x_min, x_max)
