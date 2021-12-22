@@ -144,6 +144,16 @@ class BootstrapInitializer:
         pts = (P.T / P[:, 3]).T
         return pts
 
+    # def _filter_point_cloud(self, pts: np.ndarray) -> np.ndarray:
+    #     # filter point cloud for feasible points
+    #     min_real_z = min(0, cam2_W[2])
+    #     close_enough = np.linalg.norm(pts[:, 0:3], axis=1) <= self.max_point_dist
+    #     in_front_cam =pts[:, 2] > min_real_z
+    #     mask = close_enough & in_front_cam
+    #     num_rejected = np.sum(~mask)
+    #     logging.info(f"Rejected {num_rejected} points during 3D reconstruction.")
+    #     return mask
+
     def _estimate_fundamental(self, normalize=False) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """

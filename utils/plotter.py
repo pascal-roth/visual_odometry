@@ -74,7 +74,7 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset, plot_frame_indi
     ax_err_scale = fig.add_subplot(223)
     ax_err_trans = fig.add_subplot(224)
 
-    IDX = 1000
+    IDX = 200
     OFFSET = 4
 
     frame_states = []

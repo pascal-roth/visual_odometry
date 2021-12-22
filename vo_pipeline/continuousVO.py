@@ -116,10 +116,10 @@ class ContinuousVO:
         else:
             world_scale = np.linalg.norm(world_transform[0:3, 3])
             rescaling_factor = world_scale / bootstrap_scale
-            T = world_transform
+            T[0:3, 3] *= rescaling_factor
 
         # transform landmarks to world frame
-        landmarks = rescaling_factor * bootstrap.point_cloud
+        landmarks = bootstrap.point_cloud
         new_landmarks = (hom_inv(baseline.pose) @ landmarks.T).T
 
         # initialize new trajectories
@@ -167,7 +167,7 @@ class ContinuousVO:
         print(
             f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
-        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY and frame_idx - prev_keyframe.idx > 5:
+        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY:
             # bootstrap
             is_key = True
             T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)
@@ -189,8 +189,12 @@ class ContinuousVO:
         camera_normal = T0[0:3, 0:3].T @ np.array([[0], [0], [1]])
         camera_origin = T0_inv @ np.array([[0], [0], [0], [1]])
         centered_landmarks = landmarks - camera_origin[0:3].ravel()
-        depth = np.mean([np.dot(landmark, camera_normal.ravel())
-                         for landmark in centered_landmarks])
+        depths = []
+        for landmark in centered_landmarks:
+            d = np.dot(landmark, camera_normal.ravel())
+            if d > 0:
+                depths.append(d)
+        depth = np.mean(depths)
 
         # distance of the two poses
         init = T0_inv[0:3, 3]
