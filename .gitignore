@@ -3,6 +3,7 @@ datasets/kitti/
 datasets/kitti_IMU/
 datasets/malaga-urban-dataset-extract-07
 datasets/parking
+datasets/*
 
 # Editors
 .idea/
