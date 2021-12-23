@@ -20,7 +20,6 @@ class FeatureMetaData(object):
         self.response = None  # float
         self.lifetime = None  # int
         self.cam0_point = None  # vec2
-        # self.cam1_point = None   # vec2
 
 
 class FeatureMeasurement(object):
@@ -51,10 +50,9 @@ class ImageProcessor(object):
         self.next_feature_id = 0
 
         # Feature detector
-        # self.detector = cv2.FastFeatureDetector_create(self.config.fast_threshold)
         self.detector = FeatureExtractor()
         # IMU message buffer.
-        self.imu_msg_buffer = []
+        self.imu_buffer = []
 
         # Previous and current images
         self.prev_frame = None
@@ -62,26 +60,23 @@ class ImageProcessor(object):
 
         # Features in the previous and current image.
         # list of lists of FeatureMetaData
-        self.prev_features = [[] for _ in range(GRID_NUM)]  # Don't use [[]] * N
+        self.prev_features = [[] for _ in range(GRID_NUM)]
         self.curr_features = [[] for _ in range(GRID_NUM)]
 
         # Number of features after each outlier removal step.
         # keys: before_tracking, after_tracking, after_matching, after_ransac
         self.num_features = defaultdict(int)
 
-        # load config
         # Camera calibration parameters
-        self.cam0_intrinsics = calibration_mat  # vec4
+        self.K = calibration_mat  # vec4
 
         # Take a vector from cam0 frame to the IMU frame.
         self.R_CAM_IMU = R_CAM_IMU
-        self.t_cam0_imu = T_CAM_IMU
 
     def mono_callback(self, curr_frame):
         """
         Callback function for the stereo images.
         """
-        start = time.time()
         self.curr_frame = curr_frame
 
         # Detect features in the first frame.
@@ -90,22 +85,11 @@ class ImageProcessor(object):
             self.is_first_img = False
         else:
             # Track the feature in the previous image.
-            t = time.time()
             self.track_features()
-            print('___track_features:', time.time() - t)
-            t = time.time()
 
             # Add new features into the current image.
             self.add_new_features()
-            print('___add_new_features:', time.time() - t)
-            t = time.time()
             self.prune_features()
-            print('___prune_features:', time.time() - t)
-            t = time.time()
-            print('___draw_features_stereo:', time.time() - t)
-            t = time.time()
-
-        print('===image process elapsed:', time.time() - start, f'({curr_frame.timestamp})')
 
         try:
             return self.publish()
@@ -120,7 +104,7 @@ class ImageProcessor(object):
         """
         Callback function for the imu message.
         """
-        self.imu_msg_buffer.append(msg)
+        self.imu_buffer.append(msg)
 
     def initialize_first_frame(self):
         """
@@ -135,16 +119,14 @@ class ImageProcessor(object):
 
         # Find the stereo matched points for the newly detected features.
         kpts = [kp.pt for kp in new_features]
-
-        cam0_inliers = kpts
-        response_inliers = [kp.response for kp in new_features]
+        kpts_response = [kp.response for kp in new_features]
 
         # Group the features into grids
         grid_new_features = [[] for _ in range(GRID_NUM)]
 
-        for i in range(len(cam0_inliers)):
-            cam0_point = cam0_inliers[i]
-            response = response_inliers[i]
+        for i in range(len(kpts)):
+            cam0_point = kpts[i]
+            response = kpts_response[i]
 
             row = int(cam0_point[1] / grid_height)
             col = int(cam0_point[0] / grid_width)
@@ -196,7 +178,7 @@ class ImageProcessor(object):
 
         # Track features using LK optical flow method.
         curr_kpts = self.predict_feature_tracking(
-            prev_kpts, cam0_R_p_c, self.cam0_intrinsics)
+            prev_kpts, cam0_R_p_c)
 
         curr_kpts, track_inliers = PoseEstimation.KLT(self.prev_frame.image, self.curr_frame.image,
                                                       prev_kpts.astype(np.float32), curr_kpts.astype(np.float32))
@@ -273,14 +255,13 @@ class ImageProcessor(object):
 
         # Find the stereo matched points for the newly detected features.
         kpts = [kp.pt for kp in new_features]
-        response_inliers = [kp.response for kp in new_features]
+        kpts_response = [kp.response for kp in new_features]
 
         # Group the features into grids
-        cam0_inliers = kpts
         grid_new_features = [[] for _ in range(GRID_NUM)]
-        for i in range(len(cam0_inliers)):
-            cam0_point = cam0_inliers[i]
-            response = response_inliers[i]
+        for i in range(len(kpts)):
+            cam0_point = kpts[i]
+            response = kpts_response[i]
 
             row = int(cam0_point[1] / grid_height)
             col = int(cam0_point[0] / grid_width)
@@ -351,13 +332,13 @@ class ImageProcessor(object):
         """
         # Find the start and the end limit within the imu msg buffer.
         idx_begin = None
-        for i, msg in enumerate(self.imu_msg_buffer):
+        for i, msg in enumerate(self.imu_buffer):
             if msg.timestamp >= self.prev_frame.timestamp - 0.01:
                 idx_begin = i
                 break
 
         idx_end = None
-        for i, msg in enumerate(self.imu_msg_buffer):
+        for i, msg in enumerate(self.imu_buffer):
             if msg.timestamp >= self.curr_frame.timestamp - 0.004:
                 idx_end = i
                 break
@@ -368,7 +349,7 @@ class ImageProcessor(object):
         # Compute the mean angular velocity in the IMU frame.
         mean_ang_vel = np.zeros(3)
         for i in range(idx_begin, idx_end):
-            mean_ang_vel += self.imu_msg_buffer[i].angular_velocity
+            mean_ang_vel += self.imu_buffer[i].angular_velocity
 
         if idx_end > idx_begin:
             mean_ang_vel /= (idx_end - idx_begin)
@@ -384,7 +365,7 @@ class ImageProcessor(object):
         # cam1_R_p_c = cv2.Rodrigues(cam1_mean_ang_vel * dt)[0].T
 
         # Delete the useless and used imu messages.
-        self.imu_msg_buffer = self.imu_msg_buffer[idx_end:]
+        self.imu_buffer = self.imu_buffer[idx_end:]
         return cam0_R_p_c  # , cam1_R_p_c
 
     def rescale_points(self, pts1, pts2):
@@ -419,7 +400,7 @@ class ImageProcessor(object):
         grid_width = int(np.ceil(img.shape[1] / GRID_COL))
         return grid_height, grid_width
 
-    def predict_feature_tracking(self, input_pts, R_p_c, intrinsics):
+    def predict_feature_tracking(self, input_pts, R_p_c):
         """
         predictFeatureTracking Compensates the rotation between consecutive
         camera frames so that feature tracking would be more robust and fast.
@@ -428,7 +409,6 @@ class ImageProcessor(object):
             input_pts: features in the previous image to be tracked.
             R_p_c: a rotation matrix takes a vector in the previous camera
                 frame to the current camera frame. (matrix33)
-            intrinsics: intrinsic matrix of the camera. (vec3)
 
         Returns:
             compensated_pts: predicted locations of the features in the
@@ -439,8 +419,7 @@ class ImageProcessor(object):
             return []
 
         # Intrinsic matrix.
-        K = self.cam0_intrinsics
-        H = K @ R_p_c @ np.linalg.inv(K)
+        H = self.K @ R_p_c @ np.linalg.inv(self.K)
 
         compensated_pts = []
         for i in range(len(input_pts)):

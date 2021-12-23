@@ -63,7 +63,7 @@ class VIO:
             if feature_msg is None:
                 return
 
-            print(f"Feature Message: {feature_msg.timestamp}")
+            # print(f"Feature Message: {feature_msg.timestamp}")
             # TODO: fix MSCKF
             # result = self.msckf.feature_callback(feature_msg)
             # TODO update viz
@@ -85,4 +85,3 @@ if __name__ == "__main__":
     img_queue = Queue()
     imu_queue = Queue()
     vio = VIO(img_queue, imu_queue, dataset)
-    # TODO
