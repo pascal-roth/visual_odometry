@@ -1,4 +1,4 @@
-from vo_pipeline.continuousVO import ContinuousVO
+from vio_pipeline.continuousVO import ContinuousVO
 from utils.loadData import Dataset
 import matplotlib.pyplot as plt
 from utils.matrix import *
@@ -35,7 +35,7 @@ def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
             sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
 
             # gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
-            gt = dataset.T[:i, 0:3, 3]
+            gt = dataset.ground_truth[:i, 0:3, 3]
             sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
 
             # plot images
@@ -87,7 +87,7 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset, plot_frame_indi
     frame_indices = np.array([state.idx for state in frame_states])
     p = p[OFFSET:IDX]
     frame_indices = frame_indices[OFFSET:IDX]
-    gt = dataset.T[OFFSET:IDX, 0:3, 3]
+    gt = dataset.ground_truth[OFFSET:IDX, 0:3, 3]
 
     gt_max, gt_min = np.max(gt, axis=0), np.min(gt, axis=0)
     p_max, p_min = np.max(p, axis=0), np.min(p, axis=0)
@@ -136,7 +136,7 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset, plot_frame_indi
         return zyx[0]
 
     yaw_pred = np.array([_get_yaw_angle(hom_inv(k.pose)[0:3, 0:3]) for k in frame_states])
-    yaw_true = np.array([_get_yaw_angle(T_i[0:3, 0:3]) for T_i in dataset.T])
+    yaw_true = np.array([_get_yaw_angle(T_i[0:3, 0:3]) for T_i in dataset.ground_truth])
     yaw_true = yaw_true[OFFSET:IDX]
     yaw_pred = yaw_pred[OFFSET:IDX]
 

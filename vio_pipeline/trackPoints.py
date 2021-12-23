@@ -5,9 +5,9 @@ from scipy.signal import convolve2d
 from scipy.interpolate import interp2d
 import multiprocessing
 from typing import Callable, Tuple
-from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
-from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
-from vo_pipeline.bootstrap import BootstrapInitializer
+from vio_pipeline.featureMatching import FeatureMatcher, MatcherType
+from vio_pipeline.featureExtraction import FeatureExtractor, ExtractorType
+from vio_pipeline.bootstrap import BootstrapInitializer
 
 class TrackPoints:
     

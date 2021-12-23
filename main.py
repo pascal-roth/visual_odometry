@@ -2,11 +2,11 @@ import copy
 import logging
 
 from utils.loadData import DatasetLoader, DatasetType
-from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
-from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
-from vo_pipeline.bootstrap import BootstrapInitializer
-from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
-from vo_pipeline.continuousVO import ContinuousVO
+from vio_pipeline.featureExtraction import FeatureExtractor, ExtractorType
+from vio_pipeline.featureMatching import FeatureMatcher, MatcherType
+from vio_pipeline.bootstrap import BootstrapInitializer
+from vio_pipeline.poseEstimation import AlgoMethod, PoseEstimation
+from vio_pipeline.continuousVO import ContinuousVO
 import matplotlib.pyplot as plt
 from utils.matrix import *
 from utils.plotter import plt_trajectory, plt_trajectory_landmarks
@@ -40,7 +40,9 @@ def bootstraping_example():
     next(dataset.frames)
     next(dataset.frames)
     next(dataset.frames)
-    K, img1 = next(dataset.frames)
+    frame_data = next(dataset.frames)
+    img1 = frame_data.image
+    K = dataset.K
     i = 4
     # img0 = cv2.imread("./0001.jpg")
     # img1 = cv2.imread("./0002.jpg")
@@ -59,8 +61,8 @@ def bootstraping_example():
 
     # CAUTION: to get t_i in world frame we need to invert the W -> Ci transformation T
     t_i_W = -R_C2_W.T @ T_C2_W
-    t_gt_W = dataset.T[i, 0:3, 3]
-    R_gt_W = dataset.T[3, 0:3, 0:3]
+    t_gt_W = dataset.ground_truth[i, 0:3, 3]
+    R_gt_W = dataset.ground_truth[3, 0:3, 0:3]
 
     logging.info("Reconstruction successful!")
     logging.info(f"t_3: {t_i_W}, t_gt: {t_gt_W}")
@@ -94,7 +96,9 @@ def poseEstimation_example():
     next(dataset.frames)
     next(dataset.frames)
     next(dataset.frames)
-    K, img2 = next(dataset.frames)
+    frame_data = next(dataset.frames)
+    img2 = frame_data.image
+    K = dataset.K
     i = 4
 
 
@@ -116,7 +120,7 @@ def poseEstimation_example():
     
     pose_init = hom_inv(bootstrapper.T)
     t_act = pose_init[0:3, 3]
-    gt_scale = np.linalg.norm(t_act) / np.linalg.norm(dataset.T[i, 0:3, 3])
+    gt_scale = np.linalg.norm(t_act) / np.linalg.norm(dataset.ground_truth[i, 0:3, 3])
     ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="yellow", label=f"$t_{4}$")
     print(f"t_act: {t_act}")
 
@@ -134,7 +138,7 @@ def poseEstimation_example():
         pose = pose_init @ hom_inv(M[idx])
         t_act = pose[:, 3]
         ax.scatter(t_act[0], t_act[1], t_act[2], "*", color="red")
-        t_gt = gt_scale * dataset.T[i + idx, 0:3, 3]
+        t_gt = gt_scale * dataset.ground_truth[i + idx, 0:3, 3]
         ax.scatter(t_gt[0], t_gt[1], t_gt[2], "*", color="green")
         print(f"t_act: {t_act}")
         

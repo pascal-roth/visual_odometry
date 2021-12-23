@@ -1,14 +1,14 @@
 from typing import List, Tuple, Dict
 from utils.matrix import hom_inv, to_hom
 from utils.frameQueue import FrameQueue
-from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
-from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
-from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
-from vo_pipeline.bootstrap import BootstrapInitializer
-from vo_pipeline.keypointTrajectory import KeypointTrajectories
+from vio_pipeline.featureExtraction import FeatureExtractor, ExtractorType
+from vio_pipeline.featureMatching import FeatureMatcher, MatcherType
+from vio_pipeline.poseEstimation import AlgoMethod, PoseEstimation
+from vio_pipeline.bootstrap import BootstrapInitializer
+from vio_pipeline.keypointTrajectory import KeypointTrajectories
 from utils.loadData import Dataset
-from vo_pipeline.frameState import FrameState
-from vo_pipeline.bundleAdjustment import BundleAdjustment
+from vio_pipeline.frameState import FrameState
+from vio_pipeline.bundleAdjustment import BundleAdjustment
 from params import *
 import cv2 as cv
 
@@ -63,7 +63,9 @@ class ContinuousVO:
         :return: index of last reconstructed frame
         """
 
-        K, img = next(self.dataset.frames)
+        frame_data = next(self.dataset.frames)
+        img = frame_data.image
+        K = self.dataset.K
         if self.frame_idx < self.frames_to_skip:
             self.K = K
             self.frame_queue.add(

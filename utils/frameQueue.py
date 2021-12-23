@@ -1,5 +1,5 @@
 from typing import List, Deque
-from vo_pipeline.frameState import FrameState
+from vio_pipeline.frameState import FrameState
 from collections import deque
 
 

@@ -8,10 +8,10 @@ from matplotlib.pyplot import flag
 import numpy as np
 import enum
 from typing import Callable, Tuple, Optional
-from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
-from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
-from vo_pipeline.bootstrap import BootstrapInitializer
-from vo_pipeline.trackPoints import TrackPoints
+from vio_pipeline.featureMatching import FeatureMatcher, MatcherType
+from vio_pipeline.featureExtraction import FeatureExtractor, ExtractorType
+from vio_pipeline.bootstrap import BootstrapInitializer
+from vio_pipeline.trackPoints import TrackPoints
 import params
 
 

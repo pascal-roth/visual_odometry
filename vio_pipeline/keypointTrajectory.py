@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Dict, Tuple
 from collections import defaultdict
 
-from vo_pipeline.trajectory import Trajectory
+from vio_pipeline.trajectory import Trajectory
 
 
 class KeypointTrajectories:

@@ -5,8 +5,8 @@ import numpy as np
 import logging
 
 from utils.matrix import skew
-from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
-from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
+from vio_pipeline.featureExtraction import FeatureExtractor, ExtractorType
+from vio_pipeline.featureMatching import FeatureMatcher, MatcherType
 from params import *
 
 

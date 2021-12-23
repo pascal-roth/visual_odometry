@@ -1,7 +1,6 @@
 # General
 FRAME_QUEUE_SIZE = 100
 
-
 # Bootstrapping phase
 # Feature matching
 MATCHING_THRESHOLD: float = 0.6
@@ -21,3 +20,22 @@ KLT_MIN_EIGEN_THRESHOLD = 1e-3
 MAX_BASELINE_UNCERTAINTY = 0.1
 
 BA_DISTANCE_TH = 1e2
+
+#
+# IMU Params:
+#
+CHI2_CONFIDENCE = 0.95
+
+# Initial covariance of orientation and position
+VELOCITY_COV = 0.25
+GYRO_BIAS_COV = 0.01
+ACC_BIAS_COV = 0.01
+EXTRINSIC_ROTATION_COV = 3.0462e-4
+EXTRINSIC_TRANSLATION_COV = 2.5e-5
+
+# Noise related parameters (Variances)
+GYRO_NOISE = 0.005**2
+ACC_NOISE = 0.05**2
+GYRO_BIAS_NOISE = 0.001**2
+ACC_BIAS_NOISE = 0.01**2
+OBSERVATION_NOISE = 0.35**2
