@@ -7,6 +7,8 @@ from typing import Iterator, Tuple, Optional
 import dataclasses
 from dateutil import parser
 
+from utils.matrix import hom_inv
+
 DATASET_ROOT = "./datasets"
 
 
@@ -36,10 +38,14 @@ class Dataset:
     def __init__(self,
                  K: np.ndarray,
                  frames: Iterator[FrameData],
+                 R_CAM_IMU: Optional[np.ndarray] = None,
+                 T_CAM_IMU: Optional[np.ndarray] = None,
                  imu: Iterator[IMUData] = None,
                  ground_truth: np.ndarray = None):
         assert K.shape == (3, 3), "K has to be a 3x3 matrix"
         self.K = K
+        self.R_CAM_IMU = R_CAM_IMU
+        self.T_CAM_IMU = T_CAM_IMU
         self.frames = frames
         self.imu = imu
         self.ground_truth = ground_truth
@@ -73,9 +79,22 @@ class DatasetLoader:
                 [[7.188560000000e+02, 0, 6.071928000000e+02],
                  [0, 7.188560000000e+02, 1.852157000000e+02], [0, 0, 1]],
                 dtype=np.float32)
+            R_imu_car = np.array([[9.999976e-01, 7.553071e-04, -2.035826e-03],
+                                  [-7.854027e-04, 9.998898e-01, -1.482298e-02],
+                                  [2.024406e-03, 1.482454e-02, 9.998881e-01]], dtype=np.float32)
+            T_imu_car = np.array([[-8.086759e-01], [3.195559e-01], [-7.997231e-01]])
+            R_car_cam = np.array([[7.027555e-03, -9.999753e-01, 2.599616e-05],
+                                  [-2.254837e-03, -4.184312e-05, -9.999975e-01],
+                                  [9.999728e-01, 7.027479e-03, -2.255075e-03]], dtype=np.float32)
+            T_car_cam = np.array([[-7.137748e-03], [-7.482656e-02], [-3.336324e-01]])
+            RT_IMU_CAM = np.vstack((np.hstack((R_imu_car, T_imu_car)), [0, 0, 0, 1])) @ \
+                         np.vstack((np.hstack((R_car_cam, T_car_cam)), [0, 0, 0, 1]))
+            RT_CAM_IMU = hom_inv(RT_IMU_CAM)
             kitti_imu_base = os.path.abspath(
                 os.path.join(self.dataset_root, "kitti_IMU"))
             return Dataset(K=K,
+                           R_CAM_IMU=RT_CAM_IMU[0:3, 0:3],
+                           T_CAM_IMU=RT_CAM_IMU[0:3, 3],
                            frames=DatasetLoader._load_kitti_imu_frames(
                                path=os.path.join(kitti_imu_base, "image_00", "data"),
                                times_path=os.path.join(kitti_imu_base,
@@ -121,7 +140,7 @@ class DatasetLoader:
             np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0)
             for T in ground_truth
         ],
-                        dtype=np.float32)
+            dtype=np.float32)
 
     @staticmethod
     def _load_kitti_frames(path: str, times_path: str) -> Iterator[FrameData]:
@@ -194,7 +213,7 @@ class DatasetLoader:
         frame_paths = sorted([
             os.path.join(frame_path, f) for f in os.listdir(frame_path)
             if os.path.isfile(os.path.join(frame_path, f))
-            and f.endswith("left.jpg")
+               and f.endswith("left.jpg")
         ])
         for p in frame_paths:
             img = cv2.imread(p)
@@ -211,7 +230,7 @@ class DatasetLoader:
             np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0)
             for T in ground_truth
         ],
-                        dtype=np.float32)
+            dtype=np.float32)
 
     @staticmethod
     def _load_parking_frames(

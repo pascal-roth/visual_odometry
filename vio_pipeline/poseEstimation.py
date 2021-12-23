@@ -112,7 +112,8 @@ class PoseEstimation:
 
     @staticmethod
     def KLT(img0: np.ndarray, img1: np.ndarray,
-            prev_kpts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+            prev_kpts: np.ndarray,
+            curr_kpts: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
         Apply KLT tracking to get keypoints in img1
         """
@@ -120,7 +121,7 @@ class PoseEstimation:
             img0,
             img1,
             np.float32(prev_kpts),
-            None,
+            curr_kpts,
             winSize=(params.KLT_RADIUS, params.KLT_RADIUS),
             maxLevel=params.KLT_NUM_PYRAMIDS,
             minEigThreshold=params.KLT_MIN_EIGEN_THRESHOLD,

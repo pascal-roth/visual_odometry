@@ -1,7 +1,7 @@
 import enum
 import numpy as np
 import cv2 as cv
-from typing import Callable, Tuple, List, Any
+from typing import Callable, Tuple, List, Any, Optional
 
 
 class ExtractorType(enum.Enum):
@@ -21,13 +21,13 @@ class FeatureExtractor:
         if self.extractor_type == ExtractorType.SIFT:
             self.extractor = cv.SIFT_create()
 
-    def get_kp(self, img: np.ndarray) -> Tuple[List[Any], np.ndarray]:
+    def get_kp(self, img: np.ndarray, mask: Optional[np.ndarray] = None) -> Tuple[List[Any], np.ndarray]:
         """
         Get keypoints in img according to the set ExtractorType
         :param img:
         :return: list of keypoints, features as (num_keypoints, 128) np.ndarray
         """
-        kp, des = self.extractor.detectAndCompute(img, None)
+        kp, des = self.extractor.detectAndCompute(img, mask)
         return kp, des
 
     @staticmethod

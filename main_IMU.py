@@ -1,26 +1,32 @@
+import numpy as np
+
 from queue import Queue
 from utils.loadData import Dataset, DatasetLoader, DatasetType
 from utils.message import IMUMessage, FeatureMessage, ImageMessage
 from threading import Thread
 
 from vio_pipeline.msckf import MSCKF
+from vio_pipeline.image_processor import ImageProcessor
 
 
 class VIO:
     def __init__(self, img_queue: 'Queue[ImageMessage]',
-                 imu_queue: 'Queue[IMUMessage]'):
+                 imu_queue: 'Queue[IMUMessage]',
+                 dataset: Dataset):
         """Visual Innertail Odometry Pipeline
 
         Args:
             img_queue (Queue[ImageMessage]): input image queue, from dataset
             imu_queue (Queue[IMUMessage]): input IMU data queue, from dataset
         """
+        self.K = dataset.K
+
         self.imu_queue: Queue[IMUMessage] = imu_queue
         self.img_queue: Queue[ImageMessage] = img_queue
         self.feature_queue: Queue[FeatureMessage] = Queue()
 
-        self.image_processor = None
-        self.msckf = MSCKF()
+        self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU, dataset.T_CAM_IMU)
+        # self.msckf = MSCKF()
 
         self.img_thread = Thread(target=self.process_img)
         self.imu_thread = Thread(target=self.process_imu)
@@ -31,20 +37,25 @@ class VIO:
 
     def process_img(self):
         while True:
-            img_msg = self.img_queue.get()
-            if img_msg is None:
+            curr_frame = next(dataset.frames)
+            if curr_frame is None:
                 self.feature_queue.put(None)
                 return
-            # TODO
+
+            feature_msg = self.image_processor.mono_callback(curr_frame)
+            if feature_msg is not None:
+                self.feature_queue.put(feature_msg)
 
     def process_imu(self):
         while True:
-            imu_msg = self.imu_queue.get()
-            if imu_msg is None:
-                return
-            # TODO process IMU data in feature processor
-            # self.
-            self.msckf.imu_callback(imu_msg)
+            try:
+                curr_imu = next(dataset.imu)
+
+                self.image_processor.imu_callback(curr_imu)
+                # TODO: fix msckf
+                # self.msckf.imu_callback(curr_imu)
+            except StopIteration:
+                break
 
     def process_feature(self):
         while True:
@@ -53,7 +64,8 @@ class VIO:
                 return
 
             print(f"Feature Message: {feature_msg.timestamp}")
-            result = self.msckf.feature_callback(feature_msg)
+            # TODO: fix MSCKF
+            # result = self.msckf.feature_callback(feature_msg)
             # TODO update viz
 
 
@@ -69,5 +81,8 @@ if __name__ == "__main__":
         print(imu_data)
         if i == 10:
             break
-    vio = VIO()
+
+    img_queue = Queue()
+    imu_queue = Queue()
+    vio = VIO(img_queue, imu_queue, dataset)
     # TODO
