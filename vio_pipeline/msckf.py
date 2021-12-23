@@ -98,7 +98,7 @@ class StateServer:
         """
         Resets noise covariance to values in params.
         """
-        continuous_noise_cov = np.eye(self.continuous_noise_cov.shape)
+        continuous_noise_cov = np.eye(self.continuous_noise_cov.shape[0])
         continuous_noise_cov[:3, :3] *= GYRO_NOISE
         continuous_noise_cov[3:6, 3:6] *= GYRO_BIAS_NOISE
         continuous_noise_cov[6:9, 6:9] *= ACC_NOISE
@@ -107,7 +107,7 @@ class StateServer:
 
 
 class MSCKF:
-    def __init__(self):
+    def __init__(self, R_CAM_IMU):
 
         # IMU data buffer
         # This is buffer is used to handle the unsynchronization or
@@ -125,8 +125,8 @@ class MSCKF:
 
         # Set initial IMU state
         imu_state = IMUState()
-        # TODO add transform from IMU to camera
-        # imu_state.transform
+        # TODO add transform from IMU to camera  # INFO: not sure if thats the correct transformation
+        imu_state.R_cam_imu = R_CAM_IMU
         # TODO add transform from IMU to body frame
         self.state_server = StateServer(imu_state=imu_state)
         self.state_server.reset_state_cov()

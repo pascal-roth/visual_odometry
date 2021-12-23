@@ -7,6 +7,7 @@ from threading import Thread
 
 from vio_pipeline.msckf import MSCKF
 from vio_pipeline.image_processor import ImageProcessor
+from vio_pipeline.viewer import Viewer
 
 
 class VIO:
@@ -26,7 +27,7 @@ class VIO:
         self.feature_queue: Queue[FeatureMessage] = Queue()
 
         self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU, dataset.T_CAM_IMU)
-        # self.msckf = MSCKF()
+        self.msckf = MSCKF(dataset.R_CAM_IMU)
 
         self.img_thread = Thread(target=self.process_img)
         self.imu_thread = Thread(target=self.process_imu)
@@ -35,12 +36,17 @@ class VIO:
         self.imu_thread.start()
         self.vio_thread.start()
 
+        self.viewer = Viewer()
+
     def process_img(self):
         while True:
             curr_frame = next(dataset.frames)
             if curr_frame is None:
                 self.feature_queue.put(None)
                 return
+
+            if self.viewer is not None:
+                self.viewer.update_image(curr_frame.image)
 
             feature_msg = self.image_processor.mono_callback(curr_frame)
             if feature_msg is not None:
@@ -52,8 +58,7 @@ class VIO:
                 curr_imu = next(dataset.imu)
 
                 self.image_processor.imu_callback(curr_imu)
-                # TODO: fix msckf
-                # self.msckf.imu_callback(curr_imu)
+                self.msckf.imu_callback(curr_imu)
             except StopIteration:
                 break
 
@@ -64,9 +69,10 @@ class VIO:
                 return
 
             # print(f"Feature Message: {feature_msg.timestamp}")
-            # TODO: fix MSCKF
-            # result = self.msckf.feature_callback(feature_msg)
-            # TODO update viz
+            result = self.msckf.feature_callback(feature_msg)
+
+            if result is not None and self.viewer is not None:
+                self.viewer.update_pose(result.cam0_pose)
 
 
 if __name__ == "__main__":
