@@ -16,10 +16,10 @@ class FeatureMetaData(object):
     """
 
     def __init__(self):
-        self.id = None  # int
-        self.response = None  # float
-        self.lifetime = None  # int
-        self.cam0_point = None  # vec2
+        self.id:int  = None  # int
+        self.response:float = None  # float
+        self.lifetime:int = None  # int
+        self.cam0_point: np.ndarray = None  # vec2
 
 
 class FeatureMeasurement(object):
@@ -75,7 +75,7 @@ class ImageProcessor(object):
 
     def mono_callback(self, curr_frame):
         """
-        Callback function for the stereo images.
+        Callback function for the mono images.
         """
         self.curr_frame = curr_frame
 
@@ -344,7 +344,7 @@ class ImageProcessor(object):
                 break
 
         if idx_begin is None or idx_end is None:
-            return np.identity(3), np.identity(3)
+            return np.identity(3)
 
         # Compute the mean angular velocity in the IMU frame.
         mean_ang_vel = np.zeros(3)
@@ -366,7 +366,7 @@ class ImageProcessor(object):
 
         # Delete the useless and used imu messages.
         self.imu_buffer = self.imu_buffer[idx_end:]
-        return cam0_R_p_c  # , cam1_R_p_c
+        return cam0_R_p_c
 
     def rescale_points(self, pts1, pts2):
         """

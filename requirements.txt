@@ -1,4 +1,6 @@
-#cv2
+opencv-python-headless
 numpy
 matplotlib
 scipy
+vispy>=0.9.4
+pyqt5>=5.12.2

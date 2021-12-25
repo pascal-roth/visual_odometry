@@ -5,7 +5,7 @@ from numpy.lib.function_base import cov
 from params import *
 from scipy.stats import chi2
 from utils.quaternion import Quaternion
-from utils.message import IMUMessage, FeatureMessage
+from utils.message import IMUData, FeatureMessage
 from utils.matrix import skew
 
 import time
@@ -98,7 +98,7 @@ class StateServer:
         """
         Resets noise covariance to values in params.
         """
-        continuous_noise_cov = np.eye(self.continuous_noise_cov.shape[0])
+        continuous_noise_cov = np.eye(*self.continuous_noise_cov.shape)
         continuous_noise_cov[:3, :3] *= GYRO_NOISE
         continuous_noise_cov[3:6, 3:6] *= GYRO_BIAS_NOISE
         continuous_noise_cov[6:9, 6:9] *= ACC_NOISE
@@ -112,7 +112,7 @@ class MSCKF:
         # IMU data buffer
         # This is buffer is used to handle the unsynchronization or
         # transfer delay between IMU and Image messages.
-        self.imu_msg_buffer: List[IMUMessage] = []
+        self.imu_msg_buffer: List[IMUData] = []
 
         # Features used
         self.map_server = dict()  # featureid, feature
@@ -139,7 +139,7 @@ class MSCKF:
         # Indicate if the image received is the first one
         self.is_first_img = True
 
-    def imu_callback(self, imu_msg: IMUMessage):
+    def imu_callback(self, imu_msg: IMUData):
         # IMU messages are only processed as soon as a new image
         # becomes available.
         self.imu_msg_buffer.append(imu_msg)
@@ -387,7 +387,7 @@ class MSCKF:
 
         cam_state = CameraState(
             id=imu_state.id,
-            time=time,
+            timestamp=time,
             orientation=Quaternion.from_rotation(R_cam_world),
             position=t_world_cam,
             orientation_null=Quaternion.from_rotation(R_cam_world),

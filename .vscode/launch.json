@@ -10,6 +10,13 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: main_IMU.py",
+            "type": "python",
+            "request": "launch",
+            "program": "main_IMU.py",
+            "console": "integratedTerminal"
         }
     ]
 }

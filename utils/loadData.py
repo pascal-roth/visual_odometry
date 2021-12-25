@@ -1,11 +1,15 @@
 # class to load the different datasets
 import enum
 import os
+from queue import Queue
+from threading import Thread
+import time
 import numpy as np
 import cv2
-from typing import Iterator, Tuple, Optional
-import dataclasses
+from typing import Iterator, Tuple, Optional, Type, TypeVar
 from dateutil import parser
+from utils.message import FrameData, IMUData
+import logging
 
 from utils.matrix import hom_inv
 
@@ -17,21 +21,6 @@ class DatasetType(enum.Enum):
     MALAGA = 1,
     PARKING = 2,
     KITTI_IMU = 3
-
-
-@dataclasses.dataclass(init=True, repr=True)
-class FrameData:
-    __slots__ = ["timestamp", "image"]
-    timestamp: float
-    image: np.ndarray
-
-
-@dataclasses.dataclass(init=True, repr=True)
-class IMUData:
-    __slots__ = ["timestamp", "angular_velocity", "linear_acceleration"]
-    timestamp: float
-    angular_velocity: np.ndarray
-    linear_acceleration: np.ndarray
 
 
 class Dataset:
@@ -81,12 +70,17 @@ class DatasetLoader:
                 dtype=np.float32)
             R_imu_car = np.array([[9.999976e-01, 7.553071e-04, -2.035826e-03],
                                   [-7.854027e-04, 9.998898e-01, -1.482298e-02],
-                                  [2.024406e-03, 1.482454e-02, 9.998881e-01]], dtype=np.float32)
-            T_imu_car = np.array([[-8.086759e-01], [3.195559e-01], [-7.997231e-01]])
-            R_car_cam = np.array([[7.027555e-03, -9.999753e-01, 2.599616e-05],
-                                  [-2.254837e-03, -4.184312e-05, -9.999975e-01],
-                                  [9.999728e-01, 7.027479e-03, -2.255075e-03]], dtype=np.float32)
-            T_car_cam = np.array([[-7.137748e-03], [-7.482656e-02], [-3.336324e-01]])
+                                  [2.024406e-03, 1.482454e-02, 9.998881e-01]],
+                                 dtype=np.float32)
+            T_imu_car = np.array([[-8.086759e-01], [3.195559e-01],
+                                  [-7.997231e-01]])
+            R_car_cam = np.array(
+                [[7.027555e-03, -9.999753e-01, 2.599616e-05],
+                 [-2.254837e-03, -4.184312e-05, -9.999975e-01],
+                 [9.999728e-01, 7.027479e-03, -2.255075e-03]],
+                dtype=np.float32)
+            T_car_cam = np.array([[-7.137748e-03], [-7.482656e-02],
+                                  [-3.336324e-01]])
             RT_IMU_CAM = np.vstack((np.hstack((R_imu_car, T_imu_car)), [0, 0, 0, 1])) @ \
                          np.vstack((np.hstack((R_car_cam, T_car_cam)), [0, 0, 0, 1]))
             RT_CAM_IMU = hom_inv(RT_IMU_CAM)
@@ -96,7 +90,8 @@ class DatasetLoader:
                            R_CAM_IMU=RT_CAM_IMU[0:3, 0:3],
                            T_CAM_IMU=RT_CAM_IMU[0:3, 3],
                            frames=DatasetLoader._load_kitti_imu_frames(
-                               path=os.path.join(kitti_imu_base, "image_00", "data"),
+                               path=os.path.join(kitti_imu_base, "image_00",
+                                                 "data"),
                                times_path=os.path.join(kitti_imu_base,
                                                        "image_00",
                                                        "timestamps.txt")),
@@ -140,7 +135,7 @@ class DatasetLoader:
             np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0)
             for T in ground_truth
         ],
-            dtype=np.float32)
+                        dtype=np.float32)
 
     @staticmethod
     def _load_kitti_frames(path: str, times_path: str) -> Iterator[FrameData]:
@@ -213,7 +208,7 @@ class DatasetLoader:
         frame_paths = sorted([
             os.path.join(frame_path, f) for f in os.listdir(frame_path)
             if os.path.isfile(os.path.join(frame_path, f))
-               and f.endswith("left.jpg")
+            and f.endswith("left.jpg")
         ])
         for p in frame_paths:
             img = cv2.imread(p)
@@ -230,7 +225,7 @@ class DatasetLoader:
             np.append(np.reshape(T, (3, 4)), np.array([[0, 0, 0, 1]]), axis=0)
             for T in ground_truth
         ],
-            dtype=np.float32)
+                        dtype=np.float32)
 
     @staticmethod
     def _load_parking_frames(
@@ -245,3 +240,65 @@ class DatasetLoader:
             img = cv2.imread(p)
             img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             yield K, img_gray
+
+
+# Generic type var for any data type
+T = TypeVar("T", FrameData, IMUData)
+
+
+class DataPublisher:
+    def __init__(self,
+                 data: Iterator[T],
+                 out_queue: 'Queue[T]',
+                 type_name: str = "") -> None:
+        """Publishes data from the given iterator at the given timestamps
+        to the queue out_queue
+
+        Args:
+            data (Iterator[T]): Iterator to get data from
+            out_queue (Queue[T]): Queue to write data into 
+        """
+        self.data = data
+        self.out_queue = out_queue
+        self.type_name = type_name
+        self.running = False
+        self.thread = Thread(target=self._publish)
+        self.prev_time = None
+
+    def start(self):
+        """Start publishing to out_queue
+        """
+        self.running = True
+        self.thread.start()
+
+    def stop(self):
+        """Stop publishing to out_queue
+        """
+        if self.running:
+            self.thread.join()
+            self.running = False
+        self.out_queue.put(None)
+
+    def _publish(self):
+        while self.running:
+            # wait if the queue could not be consumed fast enough
+            if self.out_queue.full():
+                time.sleep(1e-1)
+                continue
+
+            try:
+                data = next(self.data)
+            except StopIteration:
+                self.out_queue.put(None)
+                logging.warning(f"Stopped {self.type_name} DataPublisher")
+                return
+
+            # sleep until the data is supposed to be sent
+            if self.prev_time is not None:
+                interval = data.timestamp - self.prev_time
+                time.sleep(interval)
+
+            # write data into queue
+            self.out_queue.put(data)
+
+            self.prev_time = data.timestamp
