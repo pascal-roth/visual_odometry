@@ -63,6 +63,12 @@ MAX_CAM_STATE_SIZE = 20
 POSITION_STD_THRESHOLD = 8.0
 
 
+# Each dataset stream writes it's data into a threadsafe queue. 
+# The size of this queue determines the maximal number of data samples
+# to load eagerly, before they are used.
+# (10 times this value for IMU data)
+DATASET_FRAME_QUEUE_SIZE = 10
+
 #
 # Optimization config
 #

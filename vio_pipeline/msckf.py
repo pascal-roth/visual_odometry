@@ -549,7 +549,7 @@ class MSCKF:
                  21 + 6 * idx:21 + 6 * (idx + 1)] = H_xi
             H_fj[stack_count:stack_count + 2, :3] = H_fi
             r_j[stack_count:stack_count + 2] = r_i
-            stack_count +=2 
+            stack_count += 2
 
         # Project the residual and Jacobians onto the nullspace of H_fj.
         # svd of H_fj
@@ -603,9 +603,8 @@ class MSCKF:
         imu_state.position += delta_x_imu[12:15]
 
         dq_extrinsic = Quaternion.small_angle_quaternion(delta_x_imu[15:18])
-        imu_state.R_imu_cam0 = dq_extrinsic.to_rotation(
-        ) @ imu_state.R_imu_cam0
-        imu_state.t_cam0_imu += delta_x_imu[18:21]
+        imu_state.R_cam_imu = dq_extrinsic.to_rotation() @ imu_state.R_cam_imu
+        imu_state.t_imu_cam += delta_x_imu[18:21]
 
         # Update the camera states.
         for i, (cam_id,

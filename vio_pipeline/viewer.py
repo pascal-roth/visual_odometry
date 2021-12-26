@@ -69,15 +69,7 @@ class Viewer(object):
                                                      parent=img_view.scene,
                                                      method="subdivide")
 
-        # Sample visualization of some points
-        # Gets removed as soon as a pose comes in
-        # TODO: remove this as soon as poses sent to the pose_queue
-        trajectory = [] 
-        # point_cloud_scatter.set_data(None,
-        #                              edge_color=None,
-        #                              face_color=(1, 1, 1, .5),
-        #                              size=5)
-        # trajectory_view.camera = "turntable"
+        trajectory = []
 
         # update function, run at every tick of self.timer
         def update(ev):

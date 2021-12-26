@@ -11,6 +11,7 @@ from dateutil import parser
 from utils.message import FrameData, IMUData
 import logging
 
+from typing import List
 from utils.matrix import hom_inv
 
 DATASET_ROOT = "./datasets"
@@ -84,25 +85,57 @@ class DatasetLoader:
             RT_IMU_CAM = np.vstack((np.hstack((R_imu_car, T_imu_car)), [0, 0, 0, 1])) @ \
                          np.vstack((np.hstack((R_car_cam, T_car_cam)), [0, 0, 0, 1]))
             RT_CAM_IMU = hom_inv(RT_IMU_CAM)
+
             kitti_imu_base = os.path.abspath(
                 os.path.join(self.dataset_root, "kitti_IMU"))
-            return Dataset(K=K,
-                           R_CAM_IMU=RT_CAM_IMU[0:3, 0:3],
-                           T_CAM_IMU=RT_CAM_IMU[0:3, 3],
-                           frames=DatasetLoader._load_kitti_imu_frames(
-                               path=os.path.join(kitti_imu_base, "image_00",
-                                                 "data"),
-                               times_path=os.path.join(kitti_imu_base,
-                                                       "image_00",
-                                                       "timestamps.txt")),
-                           imu=DatasetLoader._load_kitti_imu_data(
-                               path=os.path.join(kitti_imu_base, "oxts",
-                                                 "data"),
-                               times_path=os.path.join(kitti_imu_base, "oxts",
-                                                       "timestamps.txt")),
-                           ground_truth=DatasetLoader._load_kitti_ground_truth(
-                               os.path.join(kitti_imu_base, "poses",
-                                            "05.txt")))
+
+            # get paths to each frame
+            kitti_frame_path = os.path.join(kitti_imu_base, "image_00", "data")
+            frame_paths = sorted([
+                os.path.join(kitti_frame_path, f)
+                for f in os.listdir(kitti_frame_path)
+                if os.path.isfile(os.path.join(kitti_frame_path, f))
+                and f.endswith(".png")
+            ])
+
+            # parse time string to microsecond precision
+            # we require different parsing here from the above method, as
+            # timestamps are in ISO format
+            kitti_times_path = os.path.join(kitti_imu_base, "image_00",
+                                            "timestamps.txt")
+            with open(kitti_times_path, "r") as f:
+                frame_timestamps = np.array([
+                    parser.parse(time_str).timestamp()
+                    for time_str in f.readlines()
+                ])
+
+            # get path to each IMU sample
+            kitti_imu_path = os.path.join(kitti_imu_base, "oxts", "data")
+            imu_paths = sorted(
+                (os.path.join(kitti_imu_path, f)
+                 for f in os.listdir(kitti_imu_path)
+                 if os.path.isfile(os.path.join(kitti_imu_path, f))
+                 and f.endswith(".txt")))
+
+            # parse time string to microsecond precision
+            kitti_imu_times_path = os.path.join(kitti_imu_base, "oxts",
+                                                "timestamps.txt")
+            with open(kitti_imu_times_path, "r") as f:
+                imu_times = np.array([
+                    parser.parse(time_str).timestamp()
+                    for time_str in f.readlines()
+                ])
+
+            return Dataset(
+                K=K,
+                R_CAM_IMU=RT_CAM_IMU[0:3, 0:3],
+                T_CAM_IMU=RT_CAM_IMU[0:3, 3],
+                frames=DatasetLoader._load_kitti_imu_frames(
+                    frame_paths=frame_paths, timestamps=frame_timestamps),
+                imu=DatasetLoader._load_kitti_imu_data(imu_paths=imu_paths,
+                                                       timestamps=imu_times),
+                ground_truth=DatasetLoader._load_kitti_ground_truth(
+                    os.path.join(kitti_imu_base, "poses", "05.txt")))
         elif self.dataset_type == DatasetType.MALAGA:
             K = np.array([[621.18428, 0, 404.0076], [0, 621.18428, 309.05989],
                           [0, 0, 1]],
@@ -153,50 +186,24 @@ class DatasetLoader:
 
     # KITTI_IMU
     @staticmethod
-    def _load_kitti_imu_frames(path: str,
-                               times_path: str) -> Iterator[FrameData]:
-        # get paths to each frame
-        frame_paths = sorted([
-            os.path.join(path, f) for f in os.listdir(path)
-            if os.path.isfile(os.path.join(path, f)) and f.endswith(".png")
-        ])
-
-        # parse time string to microsecond precision
-        # we require different parsing here from the above method, as
-        # timestamps are in ISO format
-        time_strs = []
-        with open(times_path, "r") as f:
-            time_strs = f.readlines()
-        times = np.array(
-            [parser.parse(time_str).timestamp() for time_str in time_strs])
-
-        # build frame data iterator
+    def _load_kitti_imu_frames(frame_paths: List[str],
+                               timestamps: List[float]) -> Iterator[FrameData]:
+        # only load actual data on each frame to synchronize with other data streams
         for i, p in enumerate(frame_paths):
             img = cv2.imread(p)
             img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            timestamp = times[i]
+            timestamp = timestamps[i]
             yield FrameData(timestamp, img_gray)
 
-    def _load_kitti_imu_data(path: str, times_path: str) -> Iterator[IMUData]:
-        # get path to each IMU sample
-        imu_paths = sorted([
-            os.path.join(path, f) for f in os.listdir(path)
-            if os.path.isfile(os.path.join(path, f)) and f.endswith(".txt")
-        ])
-
-        # parse time string to microsecond precision
-        time_strs = []
-        with open(times_path, "r") as f:
-            time_strs = f.readlines()
-        times = np.array(
-            [parser.parse(time_str).timestamp() for time_str in time_strs])
-
-        # build IMU iterator
+    @staticmethod
+    def _load_kitti_imu_data(imu_paths: List[str],
+                             timestamps: List[float]) -> Iterator[IMUData]:
+        # only load actual data on each frame to synchronize with other data streams
         for i, p in enumerate(imu_paths):
             imu_data = np.loadtxt(p)
             angular_velocity = imu_data[17:20]
             linear_acceleration = imu_data[11:14]
-            yield IMUData(times[i], angular_velocity, linear_acceleration)
+            yield IMUData(timestamps[i], angular_velocity, linear_acceleration)
 
     # Malaga
     @staticmethod
