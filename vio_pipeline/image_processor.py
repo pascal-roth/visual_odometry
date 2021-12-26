@@ -1,47 +1,24 @@
-import numpy as np
-import cv2
 import time
-
-from itertools import chain
 from collections import defaultdict, namedtuple
+from itertools import chain
+from typing import List
+
+import cv2
+import numpy as np
+from params import *
+from utils.message import FeatureData
 
 from vio_pipeline.featureExtraction import FeatureExtractor
 from vio_pipeline.poseEstimation import PoseEstimation
-from params import *
 
-
-class FeatureMetaData(object):
-    """
-    Contain necessary information of a feature for easy access.
-    """
-
-    def __init__(self):
-        self.id:int  = None  # int
-        self.response:float = None  # float
-        self.lifetime:int = None  # int
-        self.cam0_point: np.ndarray = None  # vec2
-
-
-class FeatureMeasurement(object):
-    """
-    Stereo measurement of a feature.
-    """
-
-    def __init__(self):
-        self.id = None
-        self.u0 = None
-        self.v0 = None
-        self.u1 = None
-        self.v1 = None
+from utils.message import FeatureMeasurement, FeatureMetaData
 
 
 class ImageProcessor(object):
     """
     Detect and track features in image sequences.
     """
-
-    def __init__(self, calibration_mat: np.ndarray,
-                 R_CAM_IMU: np.ndarray,
+    def __init__(self, calibration_mat: np.ndarray, R_CAM_IMU: np.ndarray,
                  T_CAM_IMU: np.ndarray):
         # Indicate if this is the first image message.
         self.is_first_img = True
@@ -140,7 +117,8 @@ class ImageProcessor(object):
         # Sort the new features in each grid based on its response.
         # And collect new features within each grid with high response.
         for i, new_features in enumerate(grid_new_features):
-            for feature in sorted(new_features, key=lambda x: x.response,
+            for feature in sorted(new_features,
+                                  key=lambda x: x.response,
                                   reverse=True)[:GRID_MIN_FEATURE]:
                 self.curr_features[i].append(feature)
                 self.curr_features[i][-1].id = self.next_feature_id
@@ -177,18 +155,18 @@ class ImageProcessor(object):
             return
 
         # Track features using LK optical flow method.
-        curr_kpts = self.predict_feature_tracking(
-            prev_kpts, cam0_R_p_c)
+        curr_kpts = self.predict_feature_tracking(prev_kpts, cam0_R_p_c)
 
-        curr_kpts, track_inliers = PoseEstimation.KLT(self.prev_frame.image, self.curr_frame.image,
-                                                      prev_kpts.astype(np.float32), curr_kpts.astype(np.float32))
+        curr_kpts, track_inliers = PoseEstimation.KLT(
+            self.prev_frame.image, self.curr_frame.image,
+            prev_kpts.astype(np.float32), curr_kpts.astype(np.float32))
 
         # Mark those tracked points out of the image region as untracked.
         for i, point in enumerate(curr_kpts):
             if not track_inliers[i]:
                 continue
-            if (point[0] < 0 or point[0] > img.shape[1] - 1 or
-                    point[1] < 0 or point[1] > img.shape[0] - 1):
+            if (point[0] < 0 or point[0] > img.shape[1] - 1 or point[1] < 0
+                    or point[1] > img.shape[0] - 1):
                 track_inliers[i] = 0
 
         # Collect the tracked points.
@@ -248,7 +226,8 @@ class ImageProcessor(object):
         new_features = []
         for features in new_feature_sieve:
             if len(features) > GRID_MAX_FEATURE:
-                features = sorted(features, key=lambda x: x.response,
+                features = sorted(features,
+                                  key=lambda x: x.response,
                                   reverse=True)[:GRID_MAX_FEATURE]
             new_features.append(features)
         new_features = list(chain.from_iterable(new_features))
@@ -275,7 +254,8 @@ class ImageProcessor(object):
         # Sort the new features in each grid based on its response.
         # And collect new features within each grid with high response.
         for i, new_features in enumerate(grid_new_features):
-            for feature in sorted(new_features, key=lambda x: x.response,
+            for feature in sorted(new_features,
+                                  key=lambda x: x.response,
                                   reverse=True)[:GRID_MIN_FEATURE]:
                 self.curr_features[i].append(feature)
                 self.curr_features[i][-1].id = self.next_feature_id
@@ -293,10 +273,11 @@ class ImageProcessor(object):
             # not exceed the upper bound.
             if len(features) <= GRID_MAX_FEATURE:
                 continue
-            self.curr_features[i] = sorted(features, key=lambda x: x.lifetime,
+            self.curr_features[i] = sorted(features,
+                                           key=lambda x: x.lifetime,
                                            reverse=True)[:GRID_MAX_FEATURE]
 
-    def publish(self):
+    def publish(self) -> FeatureData:
         """
         Publish the features on the current image including both the
         tracked and newly detected ones.
@@ -307,7 +288,7 @@ class ImageProcessor(object):
             curr_ids.append(feature.id)
             curr_kpts.append(feature.cam0_point)
 
-        features = []
+        features: List[FeatureMeasurement] = [None] * len(curr_ids)
         for i in range(len(curr_ids)):
             fm = FeatureMeasurement()
             fm.id = curr_ids[i]
@@ -315,9 +296,7 @@ class ImageProcessor(object):
             fm.v0 = curr_kpts[i][1]
             features.append(fm)
 
-        feature_msg = namedtuple('feature_msg', ['timestamp', 'features'])(
-            self.curr_frame.timestamp, features)
-        return feature_msg
+        return FeatureData(self.curr_frame.timestamp, features)
 
     def integrate_imu_data(self):
         """

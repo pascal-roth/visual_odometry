@@ -5,7 +5,7 @@ from numpy.lib.function_base import cov
 from params import *
 from scipy.stats import chi2
 from utils.quaternion import Quaternion
-from utils.message import IMUData, FeatureMessage
+from utils.message import IMUData, FeatureData
 from utils.matrix import skew
 
 import time
@@ -150,7 +150,7 @@ class MSCKF:
                 self._init_gravity_and_bias()
                 self.is_gravity_set = True
 
-    def feature_callback(self, feature_msg: FeatureMessage):
+    def feature_callback(self, feature_msg: FeatureData):
         if not self.is_gravity_set:
             return
         start_time = time.time()
@@ -417,13 +417,14 @@ class MSCKF:
         # Fix the covariance to be symmetric
         self.state_server.state_cov = (state_cov + state_cov.T) / 2.
 
-    def add_feature_observations(self, feature_msg: FeatureMessage):
+    def add_feature_observations(self, feature_msg: FeatureData):
         state_id = self.state_server.imu_state.id
         curr_feature_num = len(self.map_server)
         tracked_feature_num = 0
         for feature in feature_msg.features:
             if feature.id not in self.map_server:
                 # TODO add features here
+
                 pass 
         pass
 

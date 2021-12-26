@@ -3,7 +3,7 @@ import numpy as np
 from queue import Queue
 import queue
 from utils.loadData import Dataset, DatasetLoader, DatasetType, DataPublisher
-from utils.message import IMUData, FeatureMessage, FrameData
+from utils.message import IMUData, FeatureData, FrameData
 from threading import Thread
 import logging
 from vispy import app
@@ -27,7 +27,7 @@ class VIO:
 
         self.imu_queue: Queue[IMUData] = imu_queue
         self.img_queue: Queue[FrameData] = img_queue
-        self.feature_queue: Queue[FeatureMessage] = Queue()
+        self.feature_queue: Queue[FeatureData] = Queue()
 
         self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU,
                                               dataset.T_CAM_IMU)
@@ -107,9 +107,8 @@ if __name__ == "__main__":
     frame_publisher.start()
     img_publisher.start()
 
-    # create viewer on main thread
+    # create viewer on main thread, since otherwise vispy does not work
     viewer = Viewer()
-    viewer.start_vis()
 
     vio = VIO(frame_queue, imu_queue, dataset, viewer)
 

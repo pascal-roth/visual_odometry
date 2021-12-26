@@ -1,12 +1,12 @@
 import threading
-import numpy as np
-from vispy import scene, app, gloo
-from vispy.visuals import ImageVisual
-from vispy.scene import visuals
-
 from queue import Queue
 from threading import Thread
-from params import * 
+
+import numpy as np
+from params import *
+from vispy import app, scene
+from vispy.scene import visuals
+from vispy.visuals import ImageVisual
 
 
 class Viewer(object):
@@ -14,12 +14,9 @@ class Viewer(object):
         self.image_queue = Queue()
         self.pose_queue = Queue()
 
-        # self.thread = Thread(target=self.start_vis)
-
-        # self.thread.start()
         self.timer = app.Timer()
-
         self.showing_plot = False
+        self.start_vis()
 
     def update_pose(self, pose):
         if pose is None:
@@ -42,7 +39,6 @@ class Viewer(object):
         # Attach key handler to close window
         @canvas.events.key_press.connect
         def on_key_press(event):
-            print(f"Canvas event trigged, pressed key: {event.key}")
             if event.key == "X":
                 self.showing_plot = False
 
@@ -79,6 +75,7 @@ class Viewer(object):
                                      size=5)
         trajectory_view.camera = "turntable"
 
+        # update function, run at every tick of self.timer
         def update(ev):
             if not self.showing_plot:
                 self.timer.stop()
@@ -103,4 +100,4 @@ class Viewer(object):
 
         # start the timer & update at the desired framerate
         self.timer.connect(update)
-        self.timer.start(1/TARGET_FRAMERATE)
+        self.timer.start(1 / TARGET_FRAMERATE)
