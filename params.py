@@ -47,8 +47,33 @@ GRID_NUM = GRID_COL * GRID_ROW
 GRID_MIN_FEATURE = 3
 GRID_MAX_FEATURE = 5
 
-
 #
 # DISPLAY params:
 #
 TARGET_FRAMERATE = 30
+
+# Maximum number of camera states to be stored
+MAX_CAM_STATE_SIZE = 20
+
+# The position uncertainty threshold is used to determine
+# when to reset the system online. Otherwise, the ever-increaseing
+# uncertainty will make the estimation unstable.
+# Note this online reset will be some dead-reckoning.
+# Set this threshold to nonpositive to disable online reset.
+POSITION_STD_THRESHOLD = 8.0
+
+
+#
+# Optimization config
+#
+class OptimizationParams(object):
+    """
+    Configuration parameters for 3d feature position optimization.
+    """
+    def __init__(self):
+        self.translation_threshold = -1.0  # 0.2
+        self.huber_epsilon = 0.01
+        self.estimation_precision = 5e-7
+        self.initial_damping = 1e-3
+        self.outer_loop_max_iteration = 5  # 10
+        self.inner_loop_max_iteration = 5  # 10

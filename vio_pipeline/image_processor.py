@@ -288,13 +288,11 @@ class ImageProcessor(object):
             curr_ids.append(feature.id)
             curr_kpts.append(feature.cam0_point)
 
-        features: List[FeatureMeasurement] = [None] * len(curr_ids)
-        for i in range(len(curr_ids)):
-            fm = FeatureMeasurement()
-            fm.id = curr_ids[i]
-            fm.u0 = curr_kpts[i][0]
-            fm.v0 = curr_kpts[i][1]
-            features.append(fm)
+        features: List[FeatureMeasurement] = [
+            FeatureMeasurement(id=curr_ids[i],
+                               u=curr_kpts[i][0],
+                               v=curr_kpts[i][1]) for i in range(len(curr_ids))
+        ]
 
         return FeatureData(self.curr_frame.timestamp, features)
 

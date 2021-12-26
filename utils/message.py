@@ -10,23 +10,25 @@ class FeatureMetaData(object):
     """
     Contains necessary information of a feature for easy access.
     """
-    def __init__(self):
-        self.id: int = None  # int
-        self.response: float = None  # float
-        self.lifetime: int = None  # int
-        self.cam0_point: np.ndarray = None  # vec2
+    __slots__ = ["id", "response", "lifetime", "cam0_point"]
+    id: int
+    response: float
+    lifetime: int
+    cam0_point: np.ndarray
 
 
+@dataclasses.dataclass(init=True, repr=True)
 class FeatureMeasurement(object):
     """
     Mono measurement of a feature.
     """
-    def __init__(self):
-        self.id = None
-        self.u0 = None
-        self.v0 = None
-        self.u1 = None
-        self.v1 = None
+    __slots__ = ["id", "u", "v"]
+    id: int
+    u: float
+    v: float
+
+    def as_array(self) -> np.ndarray:
+        return np.array([self.u, self.v])
 
 
 @dataclasses.dataclass(init=True, repr=True)

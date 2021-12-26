@@ -8,22 +8,26 @@ from vispy import app, scene
 from vispy.scene import visuals
 from vispy.visuals import ImageVisual
 
+from utils.message import PoseData
+from utils.transform import HomTransform
+
 
 class Viewer(object):
     def __init__(self):
-        self.image_queue = Queue()
+        # keep at most the 10 past frames in memory
+        self.image_queue = Queue(maxsize=10)
         self.pose_queue = Queue()
 
         self.timer = app.Timer()
         self.showing_plot = False
         self.start_vis()
 
-    def update_pose(self, pose):
+    def update_pose(self, pose: HomTransform):
         if pose is None:
             return
-        self.pose_queue.put(pose.matrix())
+        self.pose_queue.put(pose.to_matrix())
 
-    def update_image(self, image):
+    def update_image(self, image: np.ndarray):
         if image is None:
             return
         self.image_queue.put(image)
@@ -68,12 +72,12 @@ class Viewer(object):
         # Sample visualization of some points
         # Gets removed as soon as a pose comes in
         # TODO: remove this as soon as poses sent to the pose_queue
-        trajectory = np.random.normal(size=(1 << 10, 3))
-        point_cloud_scatter.set_data(np.array(trajectory),
-                                     edge_color=None,
-                                     face_color=(1, 1, 1, .5),
-                                     size=5)
-        trajectory_view.camera = "turntable"
+        trajectory = [] 
+        # point_cloud_scatter.set_data(None,
+        #                              edge_color=None,
+        #                              face_color=(1, 1, 1, .5),
+        #                              size=5)
+        # trajectory_view.camera = "turntable"
 
         # update function, run at every tick of self.timer
         def update(ev):
@@ -84,7 +88,7 @@ class Viewer(object):
             if not self.pose_queue.empty():
                 while not self.pose_queue.empty():
                     pose = self.pose_queue.get()
-                trajectory.append(pose[:3, 3])
+                    trajectory.append(pose[:3, 3])
                 point_cloud_scatter.set_data(np.array(trajectory),
                                              edge_color=None,
                                              face_color=(1, 1, 1, .5),

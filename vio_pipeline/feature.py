@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Dict
 
 from utils.transform import HomTransform
 
@@ -8,8 +9,8 @@ class Feature(object):
     next_id = 0
 
     # Takes a vector from the cam0 frame to the cam1 frame.
-    R_cam0_cam1 = None
-    t_cam0_cam1 = None
+    R_cam0_cam1 = np.eye(3)
+    t_cam0_cam1 = np.zeros(3)
 
     def __init__(self, new_id=0, optimization_config=None):
         # An unique identifier for the feature.
@@ -17,7 +18,7 @@ class Feature(object):
 
         # Store the observations of the features in the
         # state_id(key)-image_coordinates(value) manner.
-        self.observations = dict()  # <StateID, vector4d>
+        self.observations: Dict[int, np.ndarray] = dict()  # <StateID, vector4d>
 
         # 3d postion of the feature in the world frame.
         self.position = np.zeros(3)
@@ -193,7 +194,7 @@ class Feature(object):
 
             # Add measurements.
             measurements.append(m[:2])
-            measurements.append(m[2:])
+            # measurements.append(m[2:])
 
             # This camera pose will take a vector from this camera frame
             # to the world frame.

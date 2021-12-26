@@ -28,10 +28,12 @@ class VIO:
         self.imu_queue: Queue[IMUData] = imu_queue
         self.img_queue: Queue[FrameData] = img_queue
         self.feature_queue: Queue[FeatureData] = Queue()
-
         self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU,
                                               dataset.T_CAM_IMU)
         self.msckf = MSCKF(dataset.R_CAM_IMU)
+        self.viewer = viewer
+        # IMPORTANT: Any parameters accessed by any of the threads
+        # has to be declared before this point
 
         self.img_thread = Thread(target=self.process_img)
         self.imu_thread = Thread(target=self.process_imu)
@@ -39,7 +41,6 @@ class VIO:
         self.img_thread.start()
         self.imu_thread.start()
         self.vio_thread.start()
-        self.viewer = viewer
 
     def process_img(self):
         print("Started image processing thread")
