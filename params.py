@@ -50,7 +50,7 @@ GRID_MAX_FEATURE = 5
 #
 # DISPLAY params:
 #
-TARGET_FRAMERATE = 30
+TARGET_FRAMERATE = 10
 
 # Maximum number of camera states to be stored
 MAX_CAM_STATE_SIZE = 20

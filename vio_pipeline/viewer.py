@@ -67,7 +67,8 @@ class Viewer(object):
         img_vispy: ImageVisual = scene.visuals.Image(None,
                                                      interpolation="nearest",
                                                      parent=img_view.scene,
-                                                     method="subdivide")
+                                                     method="subdivide",
+                                                     cmap="grays")
 
         trajectory = []
 

@@ -9,7 +9,7 @@
 
 | Name                        | URL                                                                                               |
 | --------------------------- | ------------------------------------------------------------------------------------------------- |
-| KITTI with IMU measurements | [kitti_IMU](https://polybox.ethz.ch/index.php/s/tqtLZ7wJstn0ooy) (1.4 GB)                         |
+| KITTI with IMU measurements | [kitti_IMU_v3](https://polybox.ethz.ch/index.php/s/b3aGsvAY22wcdOk) (1.3 GB)                      |
 | kitti05                     | [kitti05](http://rpg.ifi.uzh.ch/docs/teaching/2021/kitti05.zip) (1.4 GB)                          |
 | Malaga 07                   | [malaga07](http://rpg.ifi.uzh.ch/docs/teaching/2021/malaga-urban-dataset-extract-07.zip) (4.4 GB) |
 | Parking garage              | [parking](http://rpg.ifi.uzh.ch/docs/teaching/2021/parking.zip) (208.3 MB)                        |
