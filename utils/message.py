@@ -6,6 +6,7 @@ import dataclasses
 from utils.transform import HomTransform
 
 
+# @dataclasses.dataclass(init=True, repr=True)
 class FeatureMetaData(object):
     """
     Contains necessary information of a feature for easy access.

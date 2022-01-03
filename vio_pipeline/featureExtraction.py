@@ -21,7 +21,10 @@ class FeatureExtractor:
         if self.extractor_type == ExtractorType.SIFT:
             self.extractor = cv.SIFT_create()
 
-    def get_kp(self, img: np.ndarray, mask: Optional[np.ndarray] = None) -> Tuple[List[Any], np.ndarray]:
+    def get_kp(
+            self,
+            img: np.ndarray,
+            mask: Optional[np.ndarray] = None) -> Tuple[List[Any], np.ndarray]:
         """
         Get keypoints in img according to the set ExtractorType
         :param img:
@@ -29,6 +32,9 @@ class FeatureExtractor:
         """
         kp, des = self.extractor.detectAndCompute(img, mask)
         return kp, des
+
+    def detect(self, img: np.ndarray) -> List[Any]:
+        return cv.FastFeatureDetector_create(15).detect(img)
 
     @staticmethod
     def harris(img: np.ndarray) -> np.ndarray:

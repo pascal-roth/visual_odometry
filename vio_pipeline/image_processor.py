@@ -92,7 +92,7 @@ class ImageProcessor(object):
         grid_height, grid_width = self.get_grid_size(img)
 
         # Detect new features on the frist image.
-        new_features, _ = self.detector.get_kp(img)
+        new_features = self.detector.detect(img)
 
         # Find the stereo matched points for the newly detected features.
         kpts = [kp.pt for kp in new_features]

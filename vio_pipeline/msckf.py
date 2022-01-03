@@ -62,7 +62,7 @@ class CameraState:
         self.id = id
         self.timestamp: float = timestamp
 
-        # Orientation form world frame to camera frame
+        # Orientation from world frame to camera frame
         self.orientation = orientation
         # Position of the camera frame in world frame
         self.position = position
@@ -647,7 +647,7 @@ class MSCKF:
             # Check if the feature can be initialized if it has not been.
             if not feature.is_initialized:
                 # Ensure there is enough translation to triangulate the feature
-                if not feature.check_motion(self.state_server.cam_states):
+                if not feature.check_baseline(self.state_server.cam_states):
                     invalid_feature_ids.append(feature.id)
                     continue
 
@@ -768,7 +768,7 @@ class MSCKF:
 
             if not feature.is_initialized:
                 # Check if the feature can be initialize.
-                if not feature.check_motion(self.state_server.cam_states):
+                if not feature.check_baseline(self.state_server.cam_states):
                     # If the feature cannot be initialized, just remove
                     # the observations associated with the camera states
                     # to be removed.
