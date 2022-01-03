@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict
+from typing import Dict, Tuple, List
 
 from utils.transform import HomTransform
 
@@ -18,7 +18,8 @@ class Feature(object):
 
         # Store the observations of the features in the
         # state_id(key)-image_coordinates(value) manner.
-        self.observations: Dict[int, np.ndarray] = dict()  # <StateID, vector4d>
+        self.observations: Dict[int,
+                                np.ndarray] = dict()  # <StateID, vector4d>
 
         # 3d postion of the feature in the world frame.
         self.position = np.zeros(3)
@@ -30,13 +31,14 @@ class Feature(object):
         # Optimization configuration for solving the 3d position.
         self.optimization_config = optimization_config
 
-    def cost(self, T_c0_ci, x, z):
+    def cost(self, T_c0_ci: HomTransform, x: np.ndarray,
+             z: np.ndarray) -> float:
         """
         Compute the cost of the camera observations
 
         Arguments:
             T_c0_c1: A rigid body transformation takes a vector in c0 frame 
-                to ci frame. (Isometry3d)
+                to ci frame. (HomTransform)
             x: The current estimation. (vec3)
             z: The ith measurement of the feature j in ci frame. (vec2)
 
@@ -54,7 +56,8 @@ class Feature(object):
         e = ((z_hat - z)**2).sum()
         return e
 
-    def jacobian(self, T_c0_ci, x, z):
+    def jacobian(self, T_c0_ci: HomTransform, x: np.ndarray,
+                 z: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Compute the Jacobian of the camera observation
 
@@ -96,7 +99,8 @@ class Feature(object):
 
         return J, r, w
 
-    def generate_initial_guess(self, T_c1_c2, z1, z2):
+    def generate_initial_guess(self, T_c1_c2: HomTransform, z1: np.ndarray,
+                               z2: np.ndarray):
         """
         Compute the initial guess of the feature's 3d position using 
         only two views.
@@ -121,7 +125,7 @@ class Feature(object):
         p = np.array([*z1, 1.0]) * depth
         return p
 
-    def check_motion(self, cam_states):
+    def check_baseline(self, cam_states):
         """
         Check the input camera poses to ensure there is enough translation 
         to triangulate the feature
@@ -167,7 +171,7 @@ class Feature(object):
 
     def initialize_position(self, cam_states):
         """
-        Intialize the feature position based on all current available 
+        Initialize the feature position based on all current available 
         measurements.
 
         The computed 3d position is used to set the position member variable. 
@@ -180,21 +184,20 @@ class Feature(object):
         Returns:
             True if the estimated 3d position of the feature is valid. (bool)
         """
-        cam_poses = []  # [Isometry3d]
-        measurements = []  # [vec2]
+        cam_poses: List[HomTransform] = []
+        measurements: List[np.ndarray] = []
 
         # T_cam1_cam0 = HomTransform(Feature.R_cam0_cam1,
         #                            Feature.t_cam0_cam1).inverse()
 
-        for cam_id, m in self.observations.items():
+        for cam_id, img_pos in self.observations.items():
             try:
                 cam_state = cam_states[cam_id]
             except KeyError:
                 continue
 
             # Add measurements.
-            measurements.append(m[:2])
-            # measurements.append(m[2:])
+            measurements.append(img_pos[:2])
 
             # This camera pose will take a vector from this camera frame
             # to the world frame.
@@ -204,14 +207,15 @@ class Feature(object):
 
             cam_poses.append(cam0_pose)
             # cam_poses.append(cam1_pose)
+            # TODO: is the inverse the proper transform here?
+            # cam0_pose = HomTransform(cam_state.orientation.to_rotation(),
+            #                          cam_state.position).inverse()
 
         # All camera poses should be modified such that it takes a vector
         # from the first camera frame in the buffer to this camera frame.
         T_c0_w = cam_poses[0]
-        cam_poses_tmp = []
-        for pose in cam_poses:
-            cam_poses_tmp.append(pose.inverse() * T_c0_w)
-        cam_poses = cam_poses_tmp
+        # HomTransforms T_c0_ci for camera i
+        cam_poses = [T_ci_w.inverse() * T_c0_w for T_ci_w in cam_poses]
 
         # Generate initial guess
         initial_position = self.generate_initial_guess(cam_poses[-1],

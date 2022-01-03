@@ -41,8 +41,9 @@ ACC_BIAS_NOISE = 0.01**2
 OBSERVATION_NOISE = 0.35**2
 
 # Grid parameters
+# images have aspect ratio ~3.31
 GRID_ROW = 4
-GRID_COL = 5
+GRID_COL = 13
 GRID_NUM = GRID_COL * GRID_ROW
 GRID_MIN_FEATURE = 3
 GRID_MAX_FEATURE = 5
@@ -77,7 +78,7 @@ class OptimizationParams(object):
     Configuration parameters for 3d feature position optimization.
     """
     def __init__(self):
-        self.translation_threshold = -1.0  # 0.2
+        self.translation_threshold = 0.2  # 0.2
         self.huber_epsilon = 0.01
         self.estimation_precision = 5e-7
         self.initial_damping = 1e-3
