@@ -533,9 +533,8 @@ class MSCKF:
 
         jacobian_row_size = 2 * len(valid_cam_state_ids)
 
-        cam_states = self.state_server.cam_states
         H_xj = np.zeros(
-            (jacobian_row_size, 21 + len(self.state_server.cam_states) * 6))
+            (jacobian_row_size, 21 + len(self.state_server.cam_states) * 6))  # TODO: not sure if right values here, in mono cpp implementation they differ
         H_fj = np.zeros((jacobian_row_size, 3))
         r_j = np.zeros(jacobian_row_size)
 
@@ -553,7 +552,11 @@ class MSCKF:
 
         # Project the residual and Jacobians onto the nullspace of H_fj.
         # svd of H_fj
-        U, _, _ = np.linalg.svd(H_fj)
+        try:
+            U, _, _ = np.linalg.svd(H_fj)
+        except np.linalg.LinAlgError:
+            raise ValueError
+
         A = U[:, 3:]
 
         H_x = A.T @ H_xj
@@ -624,7 +627,10 @@ class MSCKF:
         self.state_server.state_cov = (state_cov + state_cov.T) / 2.
 
     def gating_test(self, H: np.ndarray, r: np.ndarray, dof: int) -> bool:
-        P1 = H @ self.state_server.state_cov @ H.T
+        try:
+            P1 = H @ self.state_server.state_cov @ H.T
+        except ValueError:
+            return False  # TODO: here is still an ERROR, fix it
         P2 = OBSERVATION_NOISE * np.identity(H.shape[0])
         gamma = r @ np.linalg.solve(P1 + P2, r)
         return gamma < self.chi_squared_test_table[dof]
@@ -677,6 +683,9 @@ class MSCKF:
         # Process the features which lose track.
         for feature_id in processed_feature_ids:
             feature = self.map_server[feature_id]
+
+            if feature_id == 2461:
+                print('STOP')
 
             cam_state_ids = []
             for cam_id, measurement in feature.observations.items():

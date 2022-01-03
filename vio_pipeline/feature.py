@@ -9,8 +9,8 @@ class Feature(object):
     next_id = 0
 
     # Takes a vector from the cam0 frame to the cam1 frame.
-    R_cam0_cam1 = np.eye(3)
-    t_cam0_cam1 = np.zeros(3)
+    # R_cam0_cam1 = np.eye(3)
+    # t_cam0_cam1 = np.zeros(3)
 
     def __init__(self, new_id=0, optimization_config=None):
         # An unique identifier for the feature.
@@ -183,8 +183,8 @@ class Feature(object):
         cam_poses = []  # [Isometry3d]
         measurements = []  # [vec2]
 
-        T_cam1_cam0 = HomTransform(Feature.R_cam0_cam1,
-                                   Feature.t_cam0_cam1).inverse()
+        # T_cam1_cam0 = HomTransform(Feature.R_cam0_cam1,
+        #                            Feature.t_cam0_cam1).inverse()
 
         for cam_id, m in self.observations.items():
             try:
@@ -200,10 +200,10 @@ class Feature(object):
             # to the world frame.
             cam0_pose = HomTransform(cam_state.orientation.to_rotation().T,
                                      cam_state.position)
-            cam1_pose = cam0_pose * T_cam1_cam0
+            # cam1_pose = cam0_pose * T_cam1_cam0
 
             cam_poses.append(cam0_pose)
-            cam_poses.append(cam1_pose)
+            # cam_poses.append(cam1_pose)
 
         # All camera poses should be modified such that it takes a vector
         # from the first camera frame in the buffer to this camera frame.
@@ -214,9 +214,11 @@ class Feature(object):
         cam_poses = cam_poses_tmp
 
         # Generate initial guess
-        initial_position = self.generate_initial_guess(cam_poses[-2],
+        initial_position = self.generate_initial_guess(cam_poses[-1],
                                                        measurements[0],
-                                                       measurements[-2])
+                                                       measurements[-1])
+        if initial_position[2] == 0:
+            raise ValueError
         solution = np.array([*initial_position[:2], 1.0]) / initial_position[2]
 
         # Apply Levenberg-Marquart method to solve for the 3d position.
