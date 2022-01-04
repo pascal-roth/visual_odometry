@@ -88,7 +88,7 @@ class StateServer:
         """
         Reset state covariance to values in params.
         """
-        state_cov = np.zeros_like(self.state_cov)
+        state_cov = np.zeros((21, 21))
         state_cov[3:6, 3:6] = GYRO_BIAS_COV * np.identity(3)
         state_cov[6:9, 6:9] = VELOCITY_COV * np.identity(3)
         state_cov[9:12, 9:12] = ACC_BIAS_COV * np.identity(3)
@@ -100,7 +100,7 @@ class StateServer:
         """
         Resets noise covariance to values in params.
         """
-        continuous_noise_cov = np.eye(*self.continuous_noise_cov.shape)
+        continuous_noise_cov = np.identity(12)
         continuous_noise_cov[:3, :3] *= GYRO_NOISE
         continuous_noise_cov[3:6, 3:6] *= GYRO_BIAS_NOISE
         continuous_noise_cov[6:9, 6:9] *= ACC_NOISE
@@ -408,8 +408,9 @@ class MSCKF:
         J[3:6, 12:15] = np.identity(3)
         J[3:6, 18:21] = np.identity(3)
 
+        # TODO: is this correct?
         # Resize the state covariance matrix.
-        old_size = self.state_server.state_cov.shape[0]
+        old_size, _ = self.state_server.state_cov.shape
         state_cov = np.zeros((old_size + 6, old_size + 6))
         state_cov[:old_size, :old_size] = self.state_server.state_cov
 
@@ -533,8 +534,10 @@ class MSCKF:
 
         jacobian_row_size = 2 * len(valid_cam_state_ids)
 
+        # TODO: not sure if right values here, in mono cpp implementation they differ
         H_xj = np.zeros(
-            (jacobian_row_size, 21 + len(self.state_server.cam_states) * 6))  # TODO: not sure if right values here, in mono cpp implementation they differ
+            (jacobian_row_size, 21 + len(self.state_server.cam_states) * 6)
+        )  
         H_fj = np.zeros((jacobian_row_size, 3))
         r_j = np.zeros(jacobian_row_size)
 
@@ -565,7 +568,7 @@ class MSCKF:
         return H_x, r
 
     def measurement_update(self, H: np.ndarray, r: np.ndarray) -> None:
-        if len(H) == 0 or len(r) == 0:
+        if H.size == 0 or r.size == 0:
             return
 
         # Decompose the final Jacobian matrix to reduce computational
@@ -627,13 +630,13 @@ class MSCKF:
         self.state_server.state_cov = (state_cov + state_cov.T) / 2.
 
     def gating_test(self, H: np.ndarray, r: np.ndarray, dof: int) -> bool:
-        try:
-            P1 = H @ self.state_server.state_cov @ H.T
-        except ValueError:
-            return False  # TODO: here is still an ERROR, fix it
+        # try:
+        P1 = H @ self.state_server.state_cov @ H.T
         P2 = OBSERVATION_NOISE * np.identity(H.shape[0])
         gamma = r @ np.linalg.solve(P1 + P2, r)
         return gamma < self.chi_squared_test_table[dof]
+        # except ValueError:
+        #     return False
 
     def remove_lost_features(self) -> None:
         # Remove the features that lost track.
@@ -663,8 +666,7 @@ class MSCKF:
                 if ret is False:
                     invalid_feature_ids.append(feature.id)
                     continue
-
-            jacobian_row_size += (4 * len(feature.observations) - 3)
+            jacobian_row_size += 4 * len(feature.observations) - 3
             processed_feature_ids.append(feature.id)
 
         # Remove the features that do not have enough measurements.
@@ -700,7 +702,7 @@ class MSCKF:
                 stack_count += H_xj.shape[0]
 
             # Put an upper bound on the row size of measurement Jacobian,
-            # which helps guarantee the executation time.
+            # which helps guarantee the execution time.
             if stack_count > 1500:
                 break
 
@@ -876,15 +878,17 @@ class MSCKF:
         if POSITION_STD_THRESHOLD <= 0:
             return
 
-        # Check the uncertainty of positions to determine if
-        # the system can be reset.
-        position_x_std = np.sqrt(self.state_server.state_cov[12, 12])
-        position_y_std = np.sqrt(self.state_server.state_cov[13, 13])
-        position_z_std = np.sqrt(self.state_server.state_cov[14, 14])
-
-        if max(position_x_std, position_y_std,
-               position_z_std) < POSITION_STD_THRESHOLD:
-            return
+        try:
+            # Check the uncertainty of positions to determine if
+            # the system can be reset.
+            position_x_std = np.sqrt(self.state_server.state_cov[12, 12])
+            position_y_std = np.sqrt(self.state_server.state_cov[13, 13])
+            position_z_std = np.sqrt(self.state_server.state_cov[14, 14])
+            if max(position_x_std, position_y_std,
+                position_z_std) < POSITION_STD_THRESHOLD:
+                return
+        except RuntimeWarning:
+            pass
 
         print('Start online reset...')
 
