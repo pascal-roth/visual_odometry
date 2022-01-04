@@ -211,8 +211,8 @@ class ImageProcessor(object):
             mask[y - 3:y + 4, x - 3:x + 4] = 0
 
         # Detect new features.
-        # new_features = self.detector.detect(curr_img, mask=mask)
-        new_features, _ = self.detector.get_kp(curr_img, mask=mask)
+        new_features = self.detector.detect(curr_img, mask=mask)
+        # new_features, _ = self.detector.get_kp(curr_img, mask=mask)
 
         # Collect the new detected features based on the grid.
         # Select the ones with top response within each grid afterwards.

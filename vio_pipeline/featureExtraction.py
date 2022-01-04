@@ -33,8 +33,8 @@ class FeatureExtractor:
         kp, des = self.extractor.detectAndCompute(img, mask)
         return kp, des
 
-    def detect(self, img: np.ndarray) -> List[Any]:
-        return cv.FastFeatureDetector_create(15).detect(img)
+    def detect(self, img: np.ndarray, mask=None) -> List[Any]:
+        return cv.FastFeatureDetector_create(15).detect(img, mask=mask)
 
     @staticmethod
     def harris(img: np.ndarray) -> np.ndarray:

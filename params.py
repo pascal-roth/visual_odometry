@@ -29,7 +29,7 @@ BA_DISTANCE_TH = 1e2
 #
 
 # Number of samples to use for estimating the gravity vector
-GRAVITY_ESTIMATION_SAMPLES:int = 20
+GRAVITY_ESTIMATION_SAMPLES:int = 50
 CHI2_CONFIDENCE = 0.95
 
 # Initial covariance of orientation and position
@@ -44,15 +44,20 @@ GYRO_NOISE = 0.005**2
 ACC_NOISE = 0.05**2
 GYRO_BIAS_NOISE = 0.001**2
 ACC_BIAS_NOISE = 0.01**2
-OBSERVATION_NOISE = 0.35**2
+OBSERVATION_NOISE = 0.01**2
+
+POSITION_DELTA_THRESHOLD = 2
+VELOCITY_DELTA_THRESHOLD = 1
 
 # Grid parameters
 # images have aspect ratio ~3.31
-GRID_ROW = 4
-GRID_COL = 13
+GRID_RESOLUTION = 2
+GRID_ROW = 4  * GRID_RESOLUTION
+GRID_COL = 13 * GRID_RESOLUTION
 GRID_NUM = GRID_COL * GRID_ROW
 GRID_MIN_FEATURE = 3
 GRID_MAX_FEATURE = 5
+
 
 #
 # DISPLAY params:
@@ -67,7 +72,7 @@ MAX_CAM_STATE_SIZE = 20
 # uncertainty will make the estimation unstable.
 # Note this online reset will be some dead-reckoning.
 # Set this threshold to nonpositive to disable online reset.
-POSITION_STD_THRESHOLD = 8.0
+POSITION_STD_THRESHOLD = 8
 
 
 # Each dataset stream writes it's data into a threadsafe queue. 

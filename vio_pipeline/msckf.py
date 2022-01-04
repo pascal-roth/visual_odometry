@@ -194,41 +194,43 @@ class MSCKF:
             self.start_time = feature_msg.timestamp
             self.state_server.imu_state.timestamp = feature_msg.timestamp
 
-        t = time.time()
-
-        # Propogate the IMU state.
-        # that are received before the image msg.
-        self.batch_imu_processing(feature_msg.timestamp)
-        print(f"---batch_imu_processing    {time.time() - t:.2f}s")
-        t = time.time()
-
-        # Augment the state vector.
-        self.state_augmentation(feature_msg.timestamp)
-        print(f"---state_augmentation      {time.time() - t:.2f}s")
-        t = time.time()
-
-        # Add new observations for existing features or new features
-        # in the map server.
-        self.add_feature_observations(feature_msg)
-        print(f"---add_feature_observations{time.time() - t:.2f}s")
-        t = time.time()
-
-        # Perform measurement update if necessary.
-        # And prune features and camera states.
-        self.remove_lost_features()
-        print(f"---remove_lost_features    {time.time() - t:.2f}s")
-
-        t = time.time()
-        self.prune_cam_state_buffer()
-        print(f"---prune_cam_state_buffer  {time.time() - t:.2f}s")
-        print(
-            f"---msckf elapsed:          {time.time() - start_time:.2f}s, delta_t: {feature_msg.timestamp - self.start_time:.2f}s"
-        )
-        print()
-
         try:
+            t = time.time()
+
+            # Propogate the IMU state.
+            # that are received before the image msg.
+            self.batch_imu_processing(feature_msg.timestamp)
+            # print(f"---batch_imu_processing    {time.time() - t:.2f}s")
+            # t = time.time()
+
+            # Augment the state vector.
+            self.state_augmentation(feature_msg.timestamp)
+            # print(f"---state_augmentation      {time.time() - t:.2f}s")
+            # t = time.time()
+
+            # Add new observations for existing features or new features
+            # in the map server.
+            self.add_feature_observations(feature_msg)
+            # print(f"---add_feature_observations{time.time() - t:.2f}s")
+            # t = time.time()
+
+            # Perform measurement update if necessary.
+            # And prune features and camera states.
+            self.remove_lost_features()
+            # print(f"---remove_lost_features    {time.time() - t:.2f}s")
+
+            t = time.time()
+            self.prune_cam_state_buffer()
+            # print(f"---prune_cam_state_buffer  {time.time() - t:.2f}s")
+            # print(
+            #     f"---msckf elapsed:          {time.time() - start_time:.2f}s, delta_t: {feature_msg.timestamp - self.start_time:.2f}s"
+            # )
+            # print()
             # Publish the odometry data
             return self.publish(feature_msg.timestamp)
+        except RuntimeError as e:
+            print(e)
+            self.online_reset(force=True)
         finally:
             # Reset the system if necessary
             self.online_reset()
@@ -630,10 +632,11 @@ class MSCKF:
         delta_pos = delta_x_imu[12:15]
         norm_delta_vel = np.linalg.norm(delta_vel)
         norm_delta_pos = np.linalg.norm(delta_pos)
-        if norm_delta_vel > 0.25 or norm_delta_pos > .5:
-            warnings.warn(
-                f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, ||delta_pos|| = {norm_delta_pos}, small angle quaternion approximation will be inaccurate"
-            )
+        if norm_delta_vel > VELOCITY_DELTA_THRESHOLD or norm_delta_pos > POSITION_DELTA_THRESHOLD:
+            raise RuntimeError(
+                f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, "
+                f"||delta_pos|| = {norm_delta_pos}, "
+                f"small angle quaternion approximation will be inaccurate")
 
         dq_imu = Quaternion.small_angle_quaternion(delta_x_imu[:3])
         imu_state = self.state_server.imu_state
@@ -906,32 +909,35 @@ class MSCKF:
         self.is_gravity_set = False
         self.is_first_img = True
 
-    def online_reset(self) -> None:
+    def online_reset(self, force=False) -> None:
         """
         Reset the system online if the uncertainty is too large.
         """
-        # Never perform online reset if position std threshold is non-positive.
-        if POSITION_STD_THRESHOLD <= 0:
-            return
-
-        try:
-            # Check the uncertainty of positions to determine if
-            # the system can be reset.
-            position_x_std = np.sqrt(self.state_server.state_cov[12, 12])
-            position_y_std = np.sqrt(self.state_server.state_cov[13, 13])
-            position_z_std = np.sqrt(self.state_server.state_cov[14, 14])
-            if max(position_x_std, position_y_std,
-                   position_z_std) < POSITION_STD_THRESHOLD:
+        if not force:
+            # Never perform online reset if position std threshold is non-positive.
+            if POSITION_STD_THRESHOLD <= 0:
                 return
-        except RuntimeWarning:
-            pass
 
-        print('Start online reset...')
+            try:
+                # Check the uncertainty of positions to determine if
+                # the system can be reset.
+                position_x_std = np.sqrt(self.state_server.state_cov[12, 12])
+                position_y_std = np.sqrt(self.state_server.state_cov[13, 13])
+                position_z_std = np.sqrt(self.state_server.state_cov[14, 14])
+                max_std = max(position_x_std, position_y_std, position_z_std)
+                if max_std < POSITION_STD_THRESHOLD:
+                    return
+                print(f"Starting online reset, max std:{max_std:.2f}")
+            except RuntimeWarning:
+                pass
+                
+        else:
+            print('Forced online reset')
 
         # Remove all existing camera states.
         self.state_server.cam_states.clear()
 
-        # Clear all exsiting features in the map.
+        # Clear all existing features in the map.
         self.map_server.clear()
 
         # Reset the state covariance.

@@ -29,7 +29,7 @@ class VIO:
         self.imu_queue: Queue[IMUData] = imu_queue
         self.img_queue: Queue[FrameData] = img_queue
         # keep feature queue small, since it's consumer is much slower than the producer
-        self.feature_queue: Queue[FeatureData] = Queue(maxsize=5)
+        self.feature_queue: Queue[FeatureData] = Queue(maxsize=2)
         self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU,
                                               dataset.T_CAM_IMU)
         self.msckf = MSCKF(dataset.R_CAM_IMU)
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     dataset = DatasetLoader(DatasetType.KITTI_IMU).load()
 
     frame_queue = Queue(maxsize=DATASET_FRAME_QUEUE_SIZE)
-    imu_queue = Queue(maxsize=10 * DATASET_FRAME_QUEUE_SIZE)
+    imu_queue = Queue(maxsize=20 * DATASET_FRAME_QUEUE_SIZE)
     frame_publisher = DataPublisher(dataset.frames,
                                     frame_queue,
                                     type_name="Frame")
