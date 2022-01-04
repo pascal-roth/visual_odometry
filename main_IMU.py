@@ -28,7 +28,8 @@ class VIO:
 
         self.imu_queue: Queue[IMUData] = imu_queue
         self.img_queue: Queue[FrameData] = img_queue
-        self.feature_queue: Queue[FeatureData] = Queue()
+        # keep feature queue small, since it's consumer is much slower than the producer
+        self.feature_queue: Queue[FeatureData] = Queue(maxsize=5)
         self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU,
                                               dataset.T_CAM_IMU)
         self.msckf = MSCKF(dataset.R_CAM_IMU)
@@ -38,7 +39,8 @@ class VIO:
 
         self.img_thread = Thread(target=self.process_img, name="Image Thread")
         self.imu_thread = Thread(target=self.process_imu, name="IMU Thread")
-        self.feature_thread = Thread(target=self.process_feature, name="Feature Thead")
+        self.feature_thread = Thread(target=self.process_feature,
+                                     name="Feature Thead")
         self.img_thread.start()
         self.imu_thread.start()
         self.feature_thread.start()
@@ -48,15 +50,15 @@ class VIO:
         while True:
             curr_frame = self.img_queue.get()
             if curr_frame is None:
+                # abort image processing
                 self.feature_queue.put(None)
                 return
-
-            if self.viewer is not None:
-                self.viewer.update_image(curr_frame.image)
 
             feature_msg = self.image_processor.mono_callback(curr_frame)
             if feature_msg is not None:
                 self.feature_queue.put(feature_msg)
+            if self.viewer is not None:
+                self.viewer.update_image(curr_frame.image)
 
     def process_imu(self):
         print("Started imu processing thread")

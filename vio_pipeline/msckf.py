@@ -1,6 +1,7 @@
 import numpy as np
 from copy import copy
 from typing import Dict, List, Tuple
+import warnings
 
 from numpy.lib.function_base import cov
 from params import *
@@ -149,37 +150,9 @@ class MSCKF:
 
         # initialize gravity estimate
         if not self.is_gravity_set:
-            if len(self.imu_msg_buffer) >= 2:
+            if len(self.imu_msg_buffer) >= 10:
                 self._init_gravity_and_bias()
                 self.is_gravity_set = True
-
-    def feature_callback(self, feature_msg: FeatureData) -> PoseData:
-        if not self.is_gravity_set:
-            return
-        start_time = time.time()
-
-        # Start the system if the first image has been received.
-        # The frame where the first image is received will be the origin.
-        if self.is_first_img:
-            self.is_first_img = False
-            self.state_server.imu_state.timestamp = feature_msg.timestamp
-
-        self.batch_imu_processing(feature_msg.timestamp)
-
-        self.state_augmentation(feature_msg.timestamp)
-
-        self.add_feature_observations(feature_msg)
-
-        # self.remove_lost_features()
-
-        self.prune_cam_state_buffer()
-
-        try:
-            # Publish the odometry data
-            return self.publish(feature_msg.timestamp)
-        finally:
-            # Reset the system if necessary
-            self.online_reset()
 
     def _init_gravity_and_bias(self) -> None:
         """
@@ -205,6 +178,60 @@ class MSCKF:
         IMUState.gravity = np.array([0, 0, -gravity_norm])
         self.state_server.imu_state.orientation = Quaternion.from_two_vectors(
             -IMUState.gravity, gravity_imu)
+        print(f"Initialized gravity vector: {IMUState.gravity},")
+        print(
+            f"initial orientation: {self.state_server.imu_state.orientation}")
+
+    def feature_callback(self, feature_msg: FeatureData) -> PoseData:
+        if not self.is_gravity_set:
+            return
+        start_time = time.time()
+
+        # Start the system if the first image has been received.
+        # The frame where the first image is received will be the origin.
+        if self.is_first_img:
+            self.is_first_img = False
+            self.start_time = feature_msg.timestamp
+            self.state_server.imu_state.timestamp = feature_msg.timestamp
+
+        t = time.time()
+
+        # Propogate the IMU state.
+        # that are received before the image msg.
+        self.batch_imu_processing(feature_msg.timestamp)
+        print(f"---batch_imu_processing    {time.time() - t:.2f}s")
+        t = time.time()
+
+        # Augment the state vector.
+        self.state_augmentation(feature_msg.timestamp)
+        print(f"---state_augmentation      {time.time() - t:.2f}s")
+        t = time.time()
+
+        # Add new observations for existing features or new features
+        # in the map server.
+        self.add_feature_observations(feature_msg)
+        print(f"---add_feature_observations{time.time() - t:.2f}s")
+        t = time.time()
+
+        # Perform measurement update if necessary.
+        # And prune features and camera states.
+        self.remove_lost_features()
+        print(f"---remove_lost_features    {time.time() - t:.2f}s")
+
+        t = time.time()
+        self.prune_cam_state_buffer()
+        print(f"---prune_cam_state_buffer  {time.time() - t:.2f}s")
+        print(
+            f"---msckf elapsed:          {time.time() - start_time:.2f}s, delta_t: {feature_msg.timestamp - self.start_time:.2f}s"
+        )
+        print()
+
+        try:
+            # Publish the odometry data
+            return self.publish(feature_msg.timestamp)
+        finally:
+            # Reset the system if necessary
+            self.online_reset()
 
     def batch_imu_processing(self, time_bound: float) -> None:
         """Propagate the EKF state
@@ -311,7 +338,12 @@ class MSCKF:
         """Propagate the state using 4th order Runge-Kutta
 
         Args:
-            dt (float): [description]
+            dt (float): [descri        # print('+++publish:')
+        # print('   timestamp:', imu_state.timestamp)
+        # print('   orientation:', imu_state.orientation)
+        # print('   position:', imu_state.position)
+        # print('   velocity:', imu_state.velocity)
+        # print()ption]
             gyro (np.ndarray): [description]
             acc (np.ndarray): [description]
         """
@@ -536,8 +568,7 @@ class MSCKF:
 
         # TODO: not sure if right values here, in mono cpp implementation they differ
         H_xj = np.zeros(
-            (jacobian_row_size, 21 + len(self.state_server.cam_states) * 6)
-        )  
+            (jacobian_row_size, 21 + len(self.state_server.cam_states) * 6))
         H_fj = np.zeros((jacobian_row_size, 3))
         r_j = np.zeros(jacobian_row_size)
 
@@ -595,10 +626,14 @@ class MSCKF:
 
         # Update the IMU state.
         delta_x_imu = delta_x[:21]
-
-        if (np.linalg.norm(delta_x_imu[6:9]) > 0.5
-                or np.linalg.norm(delta_x_imu[12:15]) > 1.0):
-            print('[Warning] Update change is too large')
+        delta_vel = delta_x_imu[6:9]
+        delta_pos = delta_x_imu[12:15]
+        norm_delta_vel = np.linalg.norm(delta_vel)
+        norm_delta_pos = np.linalg.norm(delta_pos)
+        if norm_delta_vel > 0.25 or norm_delta_pos > .5:
+            warnings.warn(
+                f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, ||delta_pos|| = {norm_delta_pos}, small angle quaternion approximation will be inaccurate"
+            )
 
         dq_imu = Quaternion.small_angle_quaternion(delta_x_imu[:3])
         imu_state = self.state_server.imu_state
@@ -622,9 +657,9 @@ class MSCKF:
 
         # Update state covariance.
         I_KH = np.identity(len(K)) - K @ H_thin
-        # state_cov = I_KH @ self.state_server.state_cov @ I_KH.T + (
-        #     K @ K.T * OBSERVATION_NOISE)
-        state_cov = I_KH @ self.state_server.state_cov  # ?
+        state_cov = I_KH @ self.state_server.state_cov @ I_KH.T + (
+            K @ K.T * OBSERVATION_NOISE)
+        # state_cov = I_KH @ self.state_server.state_cov  # ?
 
         # Fix the covariance to be symmetric
         self.state_server.state_cov = (state_cov + state_cov.T) / 2.
@@ -686,8 +721,8 @@ class MSCKF:
         for feature_id in processed_feature_ids:
             feature = self.map_server[feature_id]
 
-            if feature_id == 2461:
-                print('STOP')
+            # if feature_id == 2461:
+            #     print('STOP')
 
             cam_state_ids = []
             for cam_id, measurement in feature.observations.items():
@@ -704,6 +739,7 @@ class MSCKF:
             # Put an upper bound on the row size of measurement Jacobian,
             # which helps guarantee the execution time.
             if stack_count > 1500:
+                warnings.warn("Stack count too large, stopping")
                 break
 
         H_x = H_x[:stack_count]
@@ -885,7 +921,7 @@ class MSCKF:
             position_y_std = np.sqrt(self.state_server.state_cov[13, 13])
             position_z_std = np.sqrt(self.state_server.state_cov[14, 14])
             if max(position_x_std, position_y_std,
-                position_z_std) < POSITION_STD_THRESHOLD:
+                   position_z_std) < POSITION_STD_THRESHOLD:
                 return
         except RuntimeWarning:
             pass

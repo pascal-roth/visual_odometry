@@ -67,7 +67,7 @@ class Quaternion:
             q = np.array([*dq, 1.])
             q /= np.sqrt(1 + dq_square_norm)
         return cls(q)
-    
+
     @classmethod
     def from_two_vectors(cls, v0, v1) -> 'Quaternion':
         """
@@ -137,3 +137,6 @@ class Quaternion:
 
         q = L @ q2
         return Quaternion(q / np.linalg.norm(q))
+
+    def __repr__(self) -> str:
+        return f"Quaternion({list(self.q)})"

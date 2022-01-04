@@ -1,4 +1,7 @@
 # General
+from re import A
+
+
 FRAME_QUEUE_SIZE = 100
 
 # Bootstrapping phase
@@ -24,6 +27,9 @@ BA_DISTANCE_TH = 1e2
 #
 # IMU Params:
 #
+
+# Number of samples to use for estimating the gravity vector
+GRAVITY_ESTIMATION_SAMPLES:int = 20
 CHI2_CONFIDENCE = 0.95
 
 # Initial covariance of orientation and position
@@ -68,7 +74,7 @@ POSITION_STD_THRESHOLD = 8.0
 # The size of this queue determines the maximal number of data samples
 # to load eagerly, before they are used.
 # (10 times this value for IMU data)
-DATASET_FRAME_QUEUE_SIZE = 10
+DATASET_FRAME_QUEUE_SIZE = 5
 
 #
 # Optimization config
