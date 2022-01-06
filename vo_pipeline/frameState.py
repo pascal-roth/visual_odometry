@@ -8,6 +8,7 @@ class FrameState:
                  idx: int,
                  img: np.ndarray,
                  pose: np.ndarray,
+                 tracked_kps: int = 0,
                  keypoints: np.ndarray = None,
                  descriptors: np.ndarray = None, is_key=False):
         assert idx >= 0, "Frame index must be non-negative"
@@ -21,3 +22,4 @@ class FrameState:
         self.descriptors = descriptors
         self.keypoints: Dict[int, np.ndarray] = dict()
         self.is_key = is_key
+        self.num_tracked_kps = tracked_kps

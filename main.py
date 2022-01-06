@@ -9,7 +9,7 @@ from vo_pipeline.poseEstimation import AlgoMethod, PoseEstimation
 from vo_pipeline.continuousVO import ContinuousVO
 import matplotlib.pyplot as plt
 from utils.matrix import *
-from utils.plotter import plt_trajectory, plt_trajectory_landmarks
+from utils.plotter import *
 import matplotlib.animation as animation
 import numpy as np
 import logging
@@ -150,8 +150,7 @@ def continuous_vo_example():
     dataset = DatasetLoader(DatasetType.KITTI).load()
     continuousVO = ContinuousVO(dataset, frame_queue_size=50)
 
-    plt_trajectory(continuousVO, dataset)
-    # plt_trajectory_landmarks(continuousVO, dataset)
+    plt_online(continuousVO, dataset)
 
 
 def main():

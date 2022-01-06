@@ -175,7 +175,7 @@ class ContinuousVO:
             self.bootstrap_idx.append(frame_idx)
 
         # save img to frame queue
-        frame_state = FrameState(frame_idx, img, T, is_key=is_key)
+        frame_state = FrameState(frame_idx, img, T, tracked_kps=tracked_pts.shape[0], is_key=is_key)
         self.frame_queue.add(frame_state)
         if is_key:
             self.keyframes.append(frame_state)

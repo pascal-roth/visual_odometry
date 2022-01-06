@@ -23,6 +23,13 @@ class KeypointTrajectories:
         ]
         return active
 
+    def get_all(self) -> List[np.ndarray]:
+        lks = [
+            self.landmarks[self.traj2landmark[t]]
+            for t in self.on_frame[self.latest_frame].keys()
+        ]
+        return lks
+
     def tracked_to(self,
                    traj_idx: int,
                    frame_idx: int,

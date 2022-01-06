@@ -7,6 +7,105 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.cm as cm
 
+trajectory = np.array([0, 0])
+tracked_kps = np.array([0, 0])
+
+
+def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
+    fig = plt.figure()
+    # Img subplot. We plot the landmarks and keypoints of the current frame
+    ax_img = fig.add_subplot(221)
+    sc_landmarks = ax_img.scatter([], [], s=10, color="green", marker="x", label="landmarks")
+    sc_keypoints = ax_img.scatter([], [], s=10, color="red", marker="x", label="keypoints")
+
+    # Full trajectory subplot
+    ax_full_traj = fig.add_subplot(246)
+    sc_full_traj, = ax_full_traj.plot([], [], color="blue", label="trajectory", lw=2)
+
+    # Number if matched landmarks
+    ax_tracked_kps = fig.add_subplot(245)
+    sc_tracked_kps, = ax_tracked_kps.plot([], [], color='red', label="matched lks", lw=2)
+
+    # Trajectory of last 20 frames and landmarks subplot
+    ax_local_traj = fig.add_subplot(122)
+    sc_local_traj = ax_local_traj.scatter([], [], s=5, color="blue", marker="o", label="trajectory")
+    sc_local_lks = ax_local_traj.scatter([], [], s=3, color="black", marker="*", label="landmarks")
+
+    def animate(i):
+        global trajectory
+        global tracked_kps
+        continuousVO.step()
+        if len(continuousVO.keypoint_trajectories.landmarks) > 0:
+
+            # Get current pose
+            p = hom_inv(continuousVO.frame_queue.get_head().pose)[0:3, 3]
+            trajectory = np.vstack((trajectory, p[[0, 2]]))
+
+            # Tracked kps subplot
+            num_tracked_kps = continuousVO.frame_queue.get_head().num_tracked_kps
+            tracked_kps = np.vstack((tracked_kps, np.array([i+1, num_tracked_kps])))
+            sc_tracked_kps.set_data(tracked_kps[-100:, 0], tracked_kps[-100:, 1])
+
+            # Plot full trajectory
+            sc_full_traj.set_data(trajectory[:, 0], trajectory[:, 1])
+
+            # Plot local trajectory and landmarks
+            sc_local_traj.set_offsets(trajectory[-20:, :])
+
+            # Get active landmarks
+            landmarks = continuousVO.keypoint_trajectories.get_all()
+            landmarks = np.array(landmarks)
+            if landmarks.size > 0:
+                sc_local_lks.set_offsets(landmarks[:, [0, 2]])
+
+            # Image, landmarks and keypoints subplot
+            ax_img.imshow(continuousVO.frame_queue.get_head().img, cmap='gray')
+            keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
+            if keypoints.size > 0:
+                sc_keypoints.set_offsets(keypoints)
+
+            M = continuousVO.K @ continuousVO.frame_queue.get_head().pose[0:3, 0:4]
+            active = continuousVO.keypoint_trajectories.get_active()
+            active = np.array(active)
+            if active.size > 0:
+                active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
+                img_pts = (M @ active_hom.T).T
+                img_pts = (img_pts.T / img_pts[:, 2]).T
+                sc_landmarks.set_offsets(img_pts[:, 0:2])
+
+            xy_min = np.min(trajectory, axis=0)
+            xy_max = np.max(trajectory, axis=0)
+            ax_full_traj.set_xlim(xy_min[0]-2, xy_max[0]+2)
+            ax_full_traj.set_ylim(xy_min[1]-2, xy_max[1]+2)
+
+            all_points = np.vstack((trajectory[-20:, :], active[:, [0, 2]]))
+            x_min = np.min(all_points[:, 0])
+            x_max = np.max(all_points[:, 0])
+            y_min = np.min(all_points[:, 1])
+            y_max = np.max(all_points[:, 1])
+
+            ax_local_traj.set_xlim(x_min-2, x_max+2)
+            ax_local_traj.set_ylim(y_min-2, y_max+2)
+            # ax_local_traj.axis('equal')
+
+            if tracked_kps.shape[0] < 100:
+                ax_tracked_kps.set_xlim(0, tracked_kps[-1, 0])
+            else:
+                ax_tracked_kps.set_xlim(tracked_kps[-100, 0], tracked_kps[-1, 0])
+
+            ax_tracked_kps.set_ylim(0, np.max(tracked_kps[-100:, 1])+20)
+            plt.show()
+
+    ani = animation.FuncAnimation(fig, animate)
+
+    ax_img.legend()
+    ax_img.set_title("Current frame")
+    ax_local_traj.set_title("Trajectory of last 20 frames and landmarks")
+    ax_full_traj.set_title("Full trajectory")
+    ax_tracked_kps.set_title("Tracked keypoints")
+    plt.tight_layout()
+    plt.show()
+
 
 def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
     fig = plt.figure()
@@ -27,8 +126,8 @@ def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
             # plot 3D
             active = continuousVO.keypoint_trajectories.get_active()
             active = np.array(active)
-            # if active.size > 0:
-            #     sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
+            if active.size > 0:
+                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
 
             p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
             # sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
@@ -67,6 +166,8 @@ def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
     plt.show()
 
 
+
+
 def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset, plot_frame_indices=False):
     fig = plt.figure()
     ax_traj_pred = fig.add_subplot(221)
@@ -78,7 +179,7 @@ def plt_trajectory(continuousVO: ContinuousVO, dataset: Dataset, plot_frame_indi
     OFFSET = 4
 
     frame_states = []
-    for i in range(IDX):  # range(len(dataset.T)):
+    for i in range(len(dataset.T)):
         frame_state = continuousVO.step()
         frame_states.append(frame_state)
 
