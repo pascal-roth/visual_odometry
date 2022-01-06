@@ -9,12 +9,16 @@ import matplotlib.cm as cm
 
 trajectory = np.array([0, 0])
 tracked_kps = np.array([0, 0])
+it = 0
 
 
 def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
     fig = plt.figure()
     # Img subplot. We plot the landmarks and keypoints of the current frame
     ax_img = fig.add_subplot(221)
+    _, img = next(dataset.frames)
+    im = ax_img.imshow(img, cmap='gray', animated=True)
+
     sc_landmarks = ax_img.scatter([], [], s=10, color="green", marker="x", label="landmarks")
     sc_keypoints = ax_img.scatter([], [], s=10, color="red", marker="x", label="keypoints")
 
@@ -22,7 +26,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
     ax_full_traj = fig.add_subplot(246)
     sc_full_traj, = ax_full_traj.plot([], [], color="blue", label="trajectory", lw=2)
 
-    # Number if matched landmarks
+    # Number if matched landmarkim.set_data(np.random.random((5, 5)))s
     ax_tracked_kps = fig.add_subplot(245)
     sc_tracked_kps, = ax_tracked_kps.plot([], [], color='red', label="matched lks", lw=2)
 
@@ -34,6 +38,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
     def animate(i):
         global trajectory
         global tracked_kps
+        global it
         continuousVO.step()
         if len(continuousVO.keypoint_trajectories.landmarks) > 0:
 
@@ -43,7 +48,8 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
 
             # Tracked kps subplot
             num_tracked_kps = continuousVO.frame_queue.get_head().num_tracked_kps
-            tracked_kps = np.vstack((tracked_kps, np.array([i+1, num_tracked_kps])))
+            tracked_kps = np.vstack((tracked_kps, np.array([it+1, num_tracked_kps])))
+            it +=1
             sc_tracked_kps.set_data(tracked_kps[-100:, 0], tracked_kps[-100:, 1])
 
             # Plot full trajectory
@@ -59,7 +65,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
                 sc_local_lks.set_offsets(landmarks[:, [0, 2]])
 
             # Image, landmarks and keypoints subplot
-            ax_img.imshow(continuousVO.frame_queue.get_head().img, cmap='gray')
+            im.set_array(continuousVO.frame_queue.get_head().img)
             keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
             if keypoints.size > 0:
                 sc_keypoints.set_offsets(keypoints)
@@ -95,8 +101,9 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
 
             ax_tracked_kps.set_ylim(0, np.max(tracked_kps[-100:, 1])+20)
             plt.show()
+        return im,
 
-    ani = animation.FuncAnimation(fig, animate)
+    ani = animation.FuncAnimation(fig, animate, blit=True)
 
     ax_img.legend()
     ax_img.set_title("Current frame")

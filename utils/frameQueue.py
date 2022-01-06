@@ -23,7 +23,6 @@ class FrameQueue:
 
     def get(self, idx: int):
         assert idx >= 0
-        print(len(self.queue))
         return self.queue[len(self.queue) - idx - 1]
 
     def get_head(self) -> FrameState:

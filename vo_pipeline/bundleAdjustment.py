@@ -51,8 +51,11 @@ class BundleAdjustment:
 
         i = np.arange(camera_indices.size)
 
-        start_index = np.count_nonzero(camera_indices == 0)
-        # start_index = 0
+        start_index = 0
+        cameras_to_skip = int(n_cameras/4)+1
+        for j in range(cameras_to_skip):
+            start_index += np.count_nonzero(camera_indices == j)
+
         for s in range(6):
             A[2 * i[start_index:], camera_indices[start_index:] * 6 + s] = 1
             A[2 * i[start_index:] + 1, camera_indices[start_index:] * 6 + s] = 1

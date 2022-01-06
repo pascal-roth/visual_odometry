@@ -151,6 +151,7 @@ def continuous_vo_example():
     continuousVO = ContinuousVO(dataset, frame_queue_size=50)
 
     plt_online(continuousVO, dataset)
+    # plt_trajectory(continuousVO, dataset)
 
 
 def main():

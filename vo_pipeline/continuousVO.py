@@ -24,7 +24,7 @@ class ContinuousVO:
                  algo_method=AlgoMethod.P3P,
                  max_point_distance: int = 50,
                  frames_to_skip: int = 4,
-                 frame_queue_size: int = 100) -> None:
+                 frame_queue_size: int = 1000) -> None:
 
         self.dataset = dataset
         self.descriptor = FeatureExtractor(descriptorType)
@@ -207,6 +207,8 @@ class ContinuousVO:
         landmarks: List[np.ndarray] = []
         prev_keyframe = self.keyframes[-1]
         look_back = frame_idx - prev_keyframe.idx
+        if look_back >= self.frame_queue.size:
+            look_back = self.frame_queue.size - 1
         keypoints: List[np.ndarray] = []
         point_indices: List[int] = []
         camera_indices: List[int] = []
@@ -259,7 +261,6 @@ class ContinuousVO:
             frame_state = self.frame_queue.get(look_back - i - 1)
             frame_state.pose = np.copy(adjusted_poses_hom[i])
             updated.append(frame_state.idx)
-        print(updated)
 
         # update landmarks
         landmark2traj = {v: k for k, v in traj2landmark.items()}
