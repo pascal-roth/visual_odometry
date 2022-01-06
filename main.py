@@ -148,7 +148,7 @@ def poseEstimation_example():
 
 def continuous_vo_example():
     dataset = DatasetLoader(DatasetType.KITTI).load()
-    continuousVO = ContinuousVO(dataset, frame_queue_size=50)
+    continuousVO = ContinuousVO(dataset, frame_queue_size=250)
 
     plt_online(continuousVO, dataset)
     # plt_trajectory(continuousVO, dataset)

@@ -8,6 +8,7 @@ class FrameQueue:
     def __init__(self, size: int):
         assert size > 0
         self.queue: List[FrameState] = []
+        print(size)
         self.size = size
         self._i = -1
 

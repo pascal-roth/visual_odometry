@@ -7,7 +7,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.cm as cm
 
-trajectory = np.array([0, 0])
 tracked_kps = np.array([0, 0])
 it = 0
 
@@ -43,8 +42,13 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
         if len(continuousVO.keypoint_trajectories.landmarks) > 0:
 
             # Get current pose
-            p = hom_inv(continuousVO.frame_queue.get_head().pose)[0:3, 3]
-            trajectory = np.vstack((trajectory, p[[0, 2]]))
+            p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
+            print(len(continuousVO.frame_queue.queue))
+            if it < continuousVO.frame_queue.size:
+                trajectory = p[:, [0, 2]]
+            else:
+                trajectory[-200:, :] = p[-201:-1, [0, 2]]
+                trajectory = np.vstack((trajectory, p[-1, [0, 2]]))
 
             # Tracked kps subplot
             num_tracked_kps = continuousVO.frame_queue.get_head().num_tracked_kps
