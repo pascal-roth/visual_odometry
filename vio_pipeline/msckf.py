@@ -2,6 +2,7 @@ import numpy as np
 from copy import copy
 from typing import Dict, List, Tuple
 import warnings
+import pprint
 
 from numpy.lib.function_base import cov
 from params import *
@@ -90,9 +91,11 @@ class StateServer:
         Reset state covariance to values in params.
         """
         state_cov = np.zeros((21, 21))
+        # state_cov[0:3, 0:3] = error quaternion
         state_cov[3:6, 3:6] = GYRO_BIAS_COV * np.identity(3)
         state_cov[6:9, 6:9] = VELOCITY_COV * np.identity(3)
         state_cov[9:12, 9:12] = ACC_BIAS_COV * np.identity(3)
+        # state_cov[12:15, 12:15] = pos
         state_cov[15:18, 15:18] = EXTRINSIC_ROTATION_COV * np.identity(3)
         state_cov[18:21, 18:21] = EXTRINSIC_TRANSLATION_COV * np.identity(3)
         self.state_cov = state_cov
@@ -632,8 +635,9 @@ class MSCKF:
         delta_pos = delta_x_imu[12:15]
         norm_delta_vel = np.linalg.norm(delta_vel)
         norm_delta_pos = np.linalg.norm(delta_pos)
+        print(norm_delta_pos)
         if norm_delta_vel > VELOCITY_DELTA_THRESHOLD or norm_delta_pos > POSITION_DELTA_THRESHOLD:
-            raise RuntimeError(
+            warnings.warn(
                 f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, "
                 f"||delta_pos|| = {norm_delta_pos}, "
                 f"small angle quaternion approximation will be inaccurate")
@@ -672,7 +676,10 @@ class MSCKF:
         P1 = H @ self.state_server.state_cov @ H.T
         P2 = OBSERVATION_NOISE * np.identity(H.shape[0])
         gamma = r @ np.linalg.solve(P1 + P2, r)
-        return gamma < self.chi_squared_test_table[dof]
+        gamma = np.abs(gamma)
+        threshold = self.chi_squared_test_table[dof]
+        # print(f"{gamma < threshold} gamma: {gamma} < chi2: {threshold}, {dof}")
+        return gamma < threshold
         # except ValueError:
         #     return False
 
@@ -700,8 +707,9 @@ class MSCKF:
 
                 # Intialize the feature position based on all current available
                 # measurements.
-                ret = feature.initialize_position(self.state_server.cam_states)
-                if ret is False:
+                valid_pos = feature.initialize_position(
+                    self.state_server.cam_states)
+                if not valid_pos:
                     invalid_feature_ids.append(feature.id)
                     continue
             jacobian_row_size += 4 * len(feature.observations) - 3
@@ -747,6 +755,8 @@ class MSCKF:
 
         H_x = H_x[:stack_count]
         r = r[:stack_count]
+        
+        print(f"num lost features: {len(processed_feature_ids)}, num invalid features: {len(invalid_feature_ids)}, stack count: {stack_count}")
 
         # Perform the measurement update step.
         self.measurement_update(H_x, r)
@@ -817,7 +827,7 @@ class MSCKF:
                 continue
 
             if not feature.is_initialized:
-                # Check if the feature can be initialize.
+                # Check if the feature can be initialized
                 if not feature.check_baseline(self.state_server.cam_states):
                     # If the feature cannot be initialized, just remove
                     # the observations associated with the camera states
@@ -924,13 +934,30 @@ class MSCKF:
                 position_x_std = np.sqrt(self.state_server.state_cov[12, 12])
                 position_y_std = np.sqrt(self.state_server.state_cov[13, 13])
                 position_z_std = np.sqrt(self.state_server.state_cov[14, 14])
-                max_std = max(position_x_std, position_y_std, position_z_std)
-                if max_std < POSITION_STD_THRESHOLD:
+                max_pos_std = max(position_x_std, position_y_std,
+                                  position_z_std)
+                state_cov_std = np.sqrt(self.state_server.state_cov.diagonal())
+                uncertainties = {
+                    "dq": state_cov_std[0:3],
+                    "gyro bias": state_cov_std[3:6],
+                    "velocity": state_cov_std[6:9],
+                    "acc bias": state_cov_std[9:12],
+                    "pos": state_cov_std[12:15],
+                    "extrinsic rot": state_cov_std[15:18],
+                    "extrinsic trans": state_cov_std[18:21]
+                }
+                uncertainties = {
+                    k: np.max(v)
+                    for k, v in uncertainties.items()
+                }
+                # print(f"State uncertainties:")
+                # pprint.pprint(uncertainties)
+                # print(f"Tracked features: {len(self.map_server.values())}")
+                if max_pos_std < POSITION_STD_THRESHOLD:
                     return
-                print(f"Starting online reset, max std:{max_std:.2f}")
             except RuntimeWarning:
                 pass
-                
+
         else:
             print('Forced online reset')
 

@@ -127,7 +127,7 @@ class ImageProcessor(object):
 
     def track_features(self):
         """
-        Tracker features on the newly received stereo images.
+        Tracker features on the newly received mono images.
         """
         img = self.curr_frame.image
         grid_height, grid_width = self.get_grid_size(img)
@@ -158,38 +158,39 @@ class ImageProcessor(object):
         curr_kpts = self.predict_feature_tracking(prev_kpts, cam0_R_p_c)
 
         curr_kpts, track_inliers = PoseEstimation.KLT(
-            self.prev_frame.image, self.curr_frame.image,
-            prev_kpts.astype(np.float32), curr_kpts.astype(np.float32))
+            img0=self.prev_frame.image,
+            img1=self.curr_frame.image,
+            prev_kpts=prev_kpts.astype(np.float32),
+            curr_kpts=curr_kpts.astype(np.float32))
 
         # Mark those tracked points out of the image region as untracked.
-        for i, point in enumerate(curr_kpts):
-            if not track_inliers[i]:
-                continue
-            if (point[0] < 0 or point[0] > img.shape[1] - 1 or point[1] < 0
-                    or point[1] > img.shape[0] - 1):
-                track_inliers[i] = 0
+        (h, w) = img.shape
+        pts_x = curr_kpts[:, 0]
+        pts_y = curr_kpts[:, 1]
+        track_inliers = track_inliers.ravel().astype(bool) & (0 <= pts_x) & (pts_x < w) & (
+            0 <= pts_y) & (pts_y < h)
 
         # Collect the tracked points.
-        prev_tracked_ids = select(prev_ids, track_inliers)
-        prev_tracked_lifetime = select(prev_lifetime, track_inliers)
-        prev_tracked_kpts = select(prev_kpts, track_inliers)
-        curr_tracked_kpts = select(curr_kpts, track_inliers)
+        prev_tracked_ids = np.array(prev_ids)[track_inliers]
+        prev_tracked_lifetime = np.array(prev_lifetime)[track_inliers]
+        prev_tracked_kpts = np.array(prev_kpts)[track_inliers]
+        curr_tracked_kpts = np.array(curr_kpts)[track_inliers]
 
         # Number of features left after tracking.
-        self.num_features['after_tracking'] = len(curr_tracked_kpts)
+        self.num_features['after_tracking'] = curr_tracked_kpts.shape[0]
 
         # # Number of features after ransac.
         after_ransac = 0
-        for i in range(len(curr_tracked_kpts)):
-            row = int(curr_tracked_kpts[i][1] / grid_height)
-            col = int(curr_tracked_kpts[i][0] / grid_width)
+        for i in range(curr_tracked_kpts.shape[0]):
+            row = int(curr_tracked_kpts[i, 1] / grid_height)
+            col = int(curr_tracked_kpts[i, 0] / grid_width)
             code = row * GRID_COL + col
 
             grid_new_feature = FeatureMetaData()
             grid_new_feature.id = prev_tracked_ids[i]
             grid_new_feature.lifetime = prev_tracked_lifetime[i] + 1
             grid_new_feature.cam0_point = curr_tracked_kpts[i]
-            prev_tracked_lifetime[i] += 1
+            prev_tracked_lifetime[i] = grid_new_feature.lifetime
 
             self.curr_features[code].append(grid_new_feature)
             after_ransac += 1
@@ -293,7 +294,7 @@ class ImageProcessor(object):
                                u=curr_kpts[i][0],
                                v=curr_kpts[i][1]) for i in range(len(curr_ids))
         ]
-
+        print(self.num_features)
         return FeatureData(self.curr_frame.timestamp, features)
 
     def integrate_imu_data(self):
@@ -377,7 +378,8 @@ class ImageProcessor(object):
         grid_width = int(np.ceil(img.shape[1] / GRID_COL))
         return grid_height, grid_width
 
-    def predict_feature_tracking(self, input_pts, R_p_c):
+    def predict_feature_tracking(self, input_pts: np.ndarray,
+                                 R_p_c: np.ndarray) -> np.ndarray:
         """
         predictFeatureTracking Compensates the rotation between consecutive
         camera frames so that feature tracking would be more robust and fast.
@@ -398,12 +400,12 @@ class ImageProcessor(object):
         # Intrinsic matrix.
         H = self.K @ R_p_c @ np.linalg.inv(self.K)
 
-        compensated_pts = []
+        compensated_pts = np.zeros((len(input_pts), 2), dtype=np.float32)
         for i in range(len(input_pts)):
             p1 = np.array([*input_pts[i], 1.0])
             p2 = H @ p1
-            compensated_pts.append(p2[:2] / p2[2])
-        return np.array(compensated_pts, dtype=np.float32)
+            compensated_pts[i] = p2[:2] / p2[2]
+        return compensated_pts
 
 
 def select(data, selectors):
