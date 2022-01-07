@@ -1,5 +1,6 @@
 import numpy as np
 from typing import Dict, Tuple, List
+from params import MAX_FEATURE_DISTANCE
 
 from utils.transform import HomTransform
 
@@ -290,7 +291,9 @@ class Feature(object):
         is_valid_solution = True
         for pose in cam_poses:
             position = pose.R @ final_position + pose.t
-            if position[2] <= 0:
+            dist = np.linalg.norm(final_position - pose.t)
+            # reject if behind camera or too far away
+            if position[2] <= 0 or dist > MAX_FEATURE_DISTANCE:
                 is_valid_solution = False
                 break
 
