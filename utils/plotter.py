@@ -9,6 +9,8 @@ import matplotlib.cm as cm
 
 tracked_kps = np.array([0, 0])
 it = 0
+size_last = 0
+pointcloud = None
 
 
 def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
@@ -53,7 +55,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
             # Tracked kps subplot
             num_tracked_kps = continuousVO.frame_queue.get_head().num_tracked_kps
             tracked_kps = np.vstack((tracked_kps, np.array([it+1, num_tracked_kps])))
-            it +=1
+            it += 1
             sc_tracked_kps.set_data(tracked_kps[-100:, 0], tracked_kps[-100:, 1])
 
             # Plot full trajectory
@@ -71,6 +73,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
             # Image, landmarks and keypoints subplot
             im.set_array(continuousVO.frame_queue.get_head().img)
             keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
+            keypoints = continuousVO.keypoint_trajectories.latest_framel
             if keypoints.size > 0:
                 sc_keypoints.set_offsets(keypoints)
 
@@ -120,39 +123,43 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
 
 def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
     fig = plt.figure()
-    ax_3d = fig.add_subplot(121, projection="3d")
-    sc_active = ax_3d.scatter([], [], [], label="active")
-    sc_ego = ax_3d.scatter([], [], [], color="green", label="$T_i$")
-    sc_ego_key = ax_3d.scatter([], [], [],  color="red", label="$T^{key}_i$", marker="*")
-    sc_gt = ax_3d.scatter([], [], [],  color="fuchsia", label="$T^{gt}$",marker="o")
+    ax_3d = fig.add_subplot(121)
+    sc_active = ax_3d.scatter([], [], label="LKS", s=10)
+    sc_ego = ax_3d.scatter([], [], marker='x', color="green", label="$T_i$", s=20)
+    sc_gt = ax_3d.scatter([], [],  color="red", label="$T^{gt}$",marker="x", s=40)
 
     ax_img = fig.add_subplot(122)
-    sc_landmarks = ax_img.scatter([], [], s=1, color="red", marker="*", label="landmarks")
-    sc_keypoints = ax_img.scatter([], [], s=0.5, color="yellow", marker="*", label="keypoints")
+    _, img = next(dataset.frames)
+    im = ax_img.imshow(img, cmap='gray', animated=True)
+    sc_landmarks = ax_img.scatter([], [], s=3, color="red", marker="x", label="landmarks")
+    sc_keypoints = ax_img.scatter([], [], s=3, color="green", marker="x", label="keypoints")
     title = ax_3d.set_title("Reconstructed points, t=0")
 
     def animate(i):
+        global pointcloud
+        global size_last
         continuousVO.step()
         if len(continuousVO.keypoint_trajectories.landmarks) > 0:
             # plot 3D
-            active = continuousVO.keypoint_trajectories.get_active()
+            # active = continuousVO.keypoint_trajectories.get_all()
+            active = continuousVO.keypoint_trajectories.landmarks
             active = np.array(active)
             if active.size > 0:
-                sc_active._offsets3d = (active[:, 0],active[:, 1],active[:, 2])
+                sc_active.set_offsets(active[:, [0, 2]])
 
             p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
             # sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
-            sc_ego._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            sc_ego.set_offsets(p[:,[0, 2]])
 
             # gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
-            gt = dataset.T[:i, 0:3, 3]
-            sc_gt._offsets3d = (gt[:, 0], gt[:, 1], gt[:, 2])
+            gt = dataset.T[:i+1, [0,2], 3]
+            # sc_gt.set_offsets(gt[[0,3], :])
 
             # plot images
-            ax_img.imshow(continuousVO.frame_queue.get_head().img)
-            # keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
-            # if keypoints.size > 0:
-            #     sc_keypoints.set_offsets(keypoints)
+            im.set_array(continuousVO.frame_queue.get_head().img)
+            keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
+            if keypoints.size > 0:
+                sc_keypoints.set_offsets(keypoints)
 
             M = continuousVO.K @ continuousVO.frame_queue.get_head().pose[0:3, 0:4]
             if active.size > 0:
@@ -161,18 +168,77 @@ def plt_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
                 img_pts = (img_pts.T / img_pts[:, 2]).T
                 sc_landmarks.set_offsets(img_pts[:, 0:2])
 
-            title.set_text(f"Reconstructed points, t={i}")
+            title.set_text(f"Reconstructed points")
 
     ani = animation.FuncAnimation(fig, animate)
     ax_3d.set_xlabel("x")
-    ax_3d.set_ylabel("y")
-    ax_3d.set_zlabel("z")
-    ax_3d.set_xlim(-5, 5)
-    ax_3d.set_ylim(-5, 5)
-    ax_3d.set_zlim(-5, 20)
-    ax_3d.legend()
+    ax_3d.set_ylabel("z")
+    ax_3d.set_xlim(-10, 10)
+    ax_3d.set_ylim(-3, 30)
+    ax_3d.legend(loc="upper right")
 
     ax_img.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+def plt_only_trajectory_landmarks(continuousVO: ContinuousVO, dataset: Dataset):
+    fig = plt.figure()
+    ax_3d = fig.add_subplot(111)
+    sc_active = ax_3d.scatter([], [], label="LKS", s=1, color="black")
+    sc_ego = ax_3d.scatter([], [], marker='x', color="blue", label="$T_i$", s=10)
+    # sc_gt = ax_3d.scatter([], [],  color="red", label="$T^{gt}$",marker="x", s=10)
+
+    # ax_img = fig.add_subplot(122)
+    # _, img = next(dataset.frames)
+    # im = ax_img.imshow(img, cmap='gray', animated=True)
+    # sc_landmarks = ax_img.scatter([], [], s=3, color="red", marker="x", label="landmarks")
+    # sc_keypoints = ax_img.scatter([], [], s=3, color="green", marker="x", label="keypoints")
+    # title = ax_3d.set_title("Reconstructed points, t=0")
+
+    def animate(i):
+        global pointcloud
+        global size_last
+        continuousVO.step()
+        if len(continuousVO.keypoint_trajectories.landmarks) > 0:
+            # plot 3D
+            # active = continuousVO.keypoint_trajectories.get_all()
+            active = continuousVO.keypoint_trajectories.landmarks
+            active = np.array(active)
+            if active.size > 0:
+                sc_active.set_offsets(active[:, [0, 2]])
+
+            p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
+            # sc_ego_key._offsets3d = (p[:,0], p[:, 1], p[:, 2])
+            sc_ego.set_offsets(p[:,[0, 2]])
+
+            # gt_scale = np.linalg.norm(keyframes[0]) / np.linalg.norm(dataset.T[continuousVO.frames_to_skip - 1, 0:3, 3])
+            gt = dataset.T[:i, [0,2], 3]
+            # sc_gt.set_offsets(gt)
+
+            # plot images
+            # im.set_array(continuousVO.frame_queue.get_head().img)
+            # keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
+            # if keypoints.size > 0:
+            #     sc_keypoints.set_offsets(keypoints)
+            #
+            # M = continuousVO.K @ continuousVO.frame_queue.get_head().pose[0:3, 0:4]
+            # if active.size > 0:
+            #     active_hom = np.hstack((active, np.ones((active.shape[0], 1))))
+            #     img_pts = (M @ active_hom.T).T
+            #     img_pts = (img_pts.T / img_pts[:, 2]).T
+            #     sc_landmarks.set_offsets(img_pts[:, 0:2])
+            #
+            # title.set_text(f"Reconstructed points")
+
+    ani = animation.FuncAnimation(fig, animate)
+    ax_3d.set_xlabel("x")
+    ax_3d.set_ylabel("z")
+    ax_3d.set_xlim(-5, 5)
+    ax_3d.set_ylim(-3, 90)
+    ax_3d.legend(loc="upper right")
+
+    # ax_img.legend()
     plt.tight_layout()
     plt.show()
 
