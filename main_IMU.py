@@ -40,7 +40,7 @@ class VIO:
         self.img_thread = Thread(target=self.process_img, name="Image Thread")
         self.imu_thread = Thread(target=self.process_imu, name="IMU Thread")
         self.feature_thread = Thread(target=self.process_feature,
-                                     name="Feature Thead")
+                                     name="Feature Thread")
         self.img_thread.start()
         self.imu_thread.start()
         self.feature_thread.start()
@@ -63,15 +63,12 @@ class VIO:
     def process_imu(self):
         print("Started imu processing thread")
         while True:
-            try:
-                curr_imu = self.imu_queue.get()
-                if curr_imu is None:
-                    return
+            curr_imu = self.imu_queue.get()
+            if curr_imu is None:
+                return
 
-                self.image_processor.imu_callback(curr_imu)
-                self.msckf.imu_callback(curr_imu)
-            except StopIteration:
-                break
+            self.image_processor.imu_callback(curr_imu)
+            self.msckf.imu_callback(curr_imu)
 
     def process_feature(self):
         print("Started feature processing thread")
@@ -81,10 +78,13 @@ class VIO:
                 return
 
             # print(f"Feature Message: {feature_msg.timestamp}")
-            result = self.msckf.feature_callback(feature_msg)
+            pose, landmark = self.msckf.feature_callback(feature_msg)
 
-            if result is not None and self.viewer is not None:
-                self.viewer.update_pose(result.cam0_pose)
+            if self.viewer is not None:
+                if pose is not None:
+                    self.viewer.update_pose(pose.cam0_pose)
+                if landmark is not None:
+                    self.viewer.update_landmarks(landmark)
 
 
 if __name__ == "__main__":

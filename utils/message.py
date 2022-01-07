@@ -61,3 +61,9 @@ class PoseData:
     pose: HomTransform
     velocity: np.ndarray
     cam0_pose: HomTransform
+
+
+@dataclasses.dataclass(init=True, repr=True)
+class LandmarkData:
+    timestamp: float
+    landmarks: np.ndarray

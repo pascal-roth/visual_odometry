@@ -8,7 +8,7 @@ from numpy.lib.function_base import cov
 from params import *
 from scipy.stats import chi2
 from utils.quaternion import Quaternion
-from utils.message import IMUData, FeatureData, PoseData
+from utils.message import IMUData, FeatureData, LandmarkData, PoseData
 from utils.matrix import skew
 
 import time
@@ -29,7 +29,7 @@ class IMUState:
     # z-axis of the body frame should point upwards
     T_body_imu = HomTransform.identity()
 
-    def __init__(self, state_id:int=None):
+    def __init__(self, state_id: int = None):
         self.id = state_id
         # time when state was recorded
         self.timestamp: time.time = None
@@ -185,7 +185,8 @@ class MSCKF:
         print(
             f"initial orientation: {self.state_server.imu_state.orientation}")
 
-    def feature_callback(self, feature_msg: FeatureData) -> PoseData:
+    def feature_callback(
+            self, feature_msg: FeatureData) -> Tuple[PoseData, LandmarkData]:
         if not self.is_gravity_set:
             return
         start_time = time.time()
@@ -229,8 +230,11 @@ class MSCKF:
             #     f"---msckf elapsed:          {time.time() - start_time:.2f}s, delta_t: {feature_msg.timestamp - self.start_time:.2f}s"
             # )
             # print()
+
             # Publish the odometry data
-            return self.publish(feature_msg.timestamp)
+            return self.publish_pose(
+                feature_msg.timestamp), self.publish_landmarks(
+                    feature_msg.timestamp)
         except RuntimeError as e:
             print(e)
             self.online_reset(force=True)
@@ -973,7 +977,7 @@ class MSCKF:
         # Reset the state covariance.
         self.state_server.reset_state_cov()
 
-    def publish(self, time: float) -> PoseData:
+    def publish_pose(self, time: float) -> PoseData:
         imu_state = self.state_server.imu_state
         # print('+++publish:')
         # print('   timestamp:', imu_state.timestamp)
@@ -992,3 +996,10 @@ class MSCKF:
         T_c_w = HomTransform(R_w_c.T, t_c_w)
 
         return PoseData(time, T_b_w, body_velocity, T_c_w)
+
+    def publish_landmarks(self, time: float) -> LandmarkData:
+        landmarks = [
+            feature.position for feature in self.map_server.values()
+            if feature.is_initialized
+        ]
+        return LandmarkData(time, np.asarray(landmarks))
