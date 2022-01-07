@@ -29,9 +29,8 @@ class VIO:
         self.img_queue: Queue[FrameData] = img_queue
         # keep feature queue small, since it's consumer is much slower than the producer
         self.feature_queue: Queue[FeatureData] = Queue(maxsize=2)
-        self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU,
-                                              dataset.T_CAM_IMU)
-        self.msckf = MSCKF(dataset.R_CAM_IMU)
+        self.image_processor = ImageProcessor(dataset.K, dataset.T_cam_imu)
+        self.msckf = MSCKF(dataset.T_cam_imu)
         self.viewer = viewer
         # IMPORTANT: !!! Any parameters accessed by any of the threads
         # has to be declared before this point !!!

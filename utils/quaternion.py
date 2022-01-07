@@ -69,7 +69,7 @@ class Quaternion:
         return cls(q)
 
     @classmethod
-    def from_two_vectors(cls, v0, v1) -> 'Quaternion':
+    def from_two_vectors(cls, v0: np.ndarray, v1: np.ndarray) -> 'Quaternion':
         """
         Rotation quaternion from v0 to v1.
         """

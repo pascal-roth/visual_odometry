@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from params import *
 from utils.message import FeatureData
+from utils.transform import HomTransform
 
 from vio_pipeline.featureExtraction import FeatureExtractor
 from vio_pipeline.poseEstimation import PoseEstimation
@@ -18,8 +19,7 @@ class ImageProcessor(object):
     """
     Detect and track features in image sequences.
     """
-    def __init__(self, calibration_mat: np.ndarray, R_CAM_IMU: np.ndarray,
-                 T_CAM_IMU: np.ndarray):
+    def __init__(self, calibration_mat: np.ndarray, T_cam_imu: HomTransform):
         # Indicate if this is the first image message.
         self.is_first_img = True
 
@@ -48,7 +48,8 @@ class ImageProcessor(object):
         self.K = calibration_mat  # vec4
 
         # Take a vector from cam0 frame to the IMU frame.
-        self.R_CAM_IMU = R_CAM_IMU
+        self.T_cam_imu = T_cam_imu
+        self.R_imu_cam = T_cam_imu.inverse().R
 
     def mono_callback(self, curr_frame):
         """
@@ -334,7 +335,7 @@ class ImageProcessor(object):
 
         # Transform the mean angular velocity from the IMU frame to the
         # cam0 and cam1 frames.
-        cam0_mean_ang_vel = self.R_CAM_IMU.T @ mean_ang_vel
+        cam0_mean_ang_vel = self.R_imu_cam.T @ mean_ang_vel
         # cam1_mean_ang_vel = self.R_cam1_imu.T @ mean_ang_vel
 
         # Compute the relative rotation.

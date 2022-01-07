@@ -113,7 +113,7 @@ class StateServer:
 
 
 class MSCKF:
-    def __init__(self, R_CAM_IMU) -> None:
+    def __init__(self,T_cam_imu: HomTransform) -> None:
         self.optimization_config = OptimizationParams()
 
         # IMU data buffer
@@ -133,7 +133,8 @@ class MSCKF:
         # Set initial IMU state
         imu_state = IMUState()
         # TODO add transform from IMU to camera  # INFO: not sure if thats the correct transformation
-        imu_state.R_cam_imu = R_CAM_IMU
+        self.T_cam_imu = T_cam_imu
+        imu_state.R_cam_imu = T_cam_imu.R
         # TODO add transform from IMU to body frame
         self.state_server = StateServer(imu_state=imu_state)
         self.state_server.reset_state_cov()
@@ -181,6 +182,7 @@ class MSCKF:
         IMUState.gravity = np.array([0, 0, -gravity_norm])
         self.state_server.imu_state.orientation = Quaternion.from_two_vectors(
             -IMUState.gravity, gravity_imu)
+        # self.state_server.imu_state.orientation = Quaternion.from_rotation(np.eye(3))
         print(f"Initialized gravity vector: {IMUState.gravity},")
         print(
             f"initial orientation: {self.state_server.imu_state.orientation}")
@@ -694,7 +696,8 @@ class MSCKF:
         jacobian_row_size = 0
         invalid_feature_ids = []
         processed_feature_ids = []
-
+        valid_pos_n = 0
+        invalid_pos = 0
         for feature in self.map_server.values():
             # Pass the features that are still being tracked.
             if self.state_server.imu_state.id in feature.observations:
@@ -715,11 +718,16 @@ class MSCKF:
                 valid_pos = feature.initialize_position(
                     self.state_server.cam_states)
                 if not valid_pos:
+                    invalid_pos += 1
                     invalid_feature_ids.append(feature.id)
                     continue
+                else:
+                    valid_pos_n += 1
+
             jacobian_row_size += 4 * len(feature.observations) - 3
             processed_feature_ids.append(feature.id)
 
+        print(f"invalid pos: {invalid_pos}, valid pos: {valid_pos_n}")
         # Remove the features that do not have enough measurements.
         for feature_id in invalid_feature_ids:
             del self.map_server[feature_id]

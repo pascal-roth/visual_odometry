@@ -5,7 +5,7 @@ FRAME_QUEUE_SIZE = 100
 
 # Bootstrapping phase
 # Feature matching
-MATCHING_THRESHOLD: float = 0.6
+MATCHING_THRESHOLD: float = 0.8
 
 # RANSAC Fundamental matrix estimation
 RANSAC_REPROJ_THRESHOLD: float = .5
@@ -29,7 +29,7 @@ BA_DISTANCE_TH = 1e2
 #
 
 # Number of samples to use for estimating the gravity vector
-GRAVITY_ESTIMATION_SAMPLES: int = 50
+GRAVITY_ESTIMATION_SAMPLES: int = 5
 CHI2_CONFIDENCE = 0.6
 
 # Initial covariance of orientation and position
@@ -44,7 +44,7 @@ GYRO_NOISE = 0.005**2
 ACC_NOISE = 0.05**2
 GYRO_BIAS_NOISE = 0.001**2
 ACC_BIAS_NOISE = 0.01**2
-OBSERVATION_NOISE = 0.01**2
+OBSERVATION_NOISE = 5**2
 
 POSITION_DELTA_THRESHOLD = 2
 VELOCITY_DELTA_THRESHOLD = 1
