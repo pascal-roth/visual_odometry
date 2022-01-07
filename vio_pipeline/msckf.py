@@ -188,7 +188,7 @@ class MSCKF:
     def feature_callback(
             self, feature_msg: FeatureData) -> Tuple[PoseData, LandmarkData]:
         if not self.is_gravity_set:
-            return
+            return None, None
         start_time = time.time()
 
         # Start the system if the first image has been received.

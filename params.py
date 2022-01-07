@@ -30,7 +30,7 @@ BA_DISTANCE_TH = 1e2
 
 # Number of samples to use for estimating the gravity vector
 GRAVITY_ESTIMATION_SAMPLES: int = 50
-CHI2_CONFIDENCE = 0.95
+CHI2_CONFIDENCE = 0.6
 
 # Initial covariance of orientation and position
 VELOCITY_COV = 0.25
@@ -51,7 +51,7 @@ VELOCITY_DELTA_THRESHOLD = 1
 
 # Grid parameters
 # images have aspect ratio ~3.31
-GRID_RESOLUTION = 1
+GRID_RESOLUTION = 3
 GRID_ROW = 4 * GRID_RESOLUTION
 GRID_COL = 13  * GRID_RESOLUTION
 GRID_NUM = GRID_COL * GRID_ROW

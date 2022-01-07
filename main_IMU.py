@@ -6,7 +6,6 @@ from utils.loadData import Dataset, DatasetLoader, DatasetType, DataPublisher
 from utils.message import IMUData, FeatureData, FrameData
 from threading import Thread
 import logging
-from vispy import app
 
 from vio_pipeline.msckf import MSCKF
 from vio_pipeline.image_processor import ImageProcessor
@@ -55,10 +54,12 @@ class VIO:
                 return
 
             feature_msg = self.image_processor.mono_callback(curr_frame)
-            if feature_msg is not None:
-                self.feature_queue.put(feature_msg)
+            if feature_msg is None:
+                continue
+            self.feature_queue.put(feature_msg)
             if self.viewer is not None:
                 self.viewer.update_image(curr_frame.image)
+                self.viewer.update_features(feature_msg)
 
     def process_imu(self):
         print("Started imu processing thread")
@@ -103,10 +104,9 @@ if __name__ == "__main__":
     frame_publisher.start()
     img_publisher.start()
 
-    # create viewer on main thread, since otherwise vispy does not work
+
+    # create viewer on main thread, since otherwise matplotlib
     viewer = Viewer()
-
     vio = VIO(frame_queue, imu_queue, dataset, viewer)
-
-    if sys.flags.interactive == 0:
-        app.run()
+    viewer.start_vis()
+    
