@@ -50,6 +50,9 @@ class BootstrapInitializer:
         self.pts_des2 = self.pts_des2[mask]
         self.point_cloud = self.point_cloud[mask]
 
+        # Save kps of second img
+        self.kps = None
+
 
     # def select_baseline(self):
     #     img0 = None
@@ -166,6 +169,7 @@ class BootstrapInitializer:
         descriptor = FeatureExtractor(ExtractorType.SIFT)
         kp0, des0 = descriptor.get_kp(self.img1)
         kp1, des1 = descriptor.get_kp(self.img2)
+        self.kps = kp1
 
         # match features
         matcher = FeatureMatcher(MatcherType.FLANN, k=2, matching_threshold=MATCHING_THRESHOLD)

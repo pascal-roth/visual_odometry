@@ -20,6 +20,6 @@ class FrameState:
         # TODO: resolve conflict which keypoints is the right one
         self.keypoints = keypoints
         self.descriptors = descriptors
-        self.keypoints: Dict[int, np.ndarray] = dict()
+        self.keypoints: Dict[int, np.ndarray] = keypoints
         self.is_key = is_key
         self.num_tracked_kps = tracked_kps

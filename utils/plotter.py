@@ -45,7 +45,6 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
 
             # Get current pose
             p = np.array([hom_inv(k.pose)[0:3, 3] for k in continuousVO.frame_queue])
-            print(len(continuousVO.frame_queue.queue))
             if it < continuousVO.frame_queue.size:
                 trajectory = p[:, [0, 2]]
             else:
@@ -72,10 +71,13 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
 
             # Image, landmarks and keypoints subplot
             im.set_array(continuousVO.frame_queue.get_head().img)
-            keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
-            keypoints = continuousVO.keypoint_trajectories.latest_framel
-            if keypoints.size > 0:
-                sc_keypoints.set_offsets(keypoints)
+            # keypoints, _, _ = continuousVO.keypoint_trajectories.at_frame(continuousVO.keypoint_trajectories.latest_frame)
+            keypoints = continuousVO.frame_queue.queue[-1].keypoints
+            if keypoints is not None:
+                kps = [keypoints[k].pt for k in range(len(keypoints))]
+                kps = np.array(kps)
+                if kps.size > 0:
+                    sc_keypoints.set_offsets(kps)
 
             M = continuousVO.K @ continuousVO.frame_queue.get_head().pose[0:3, 0:4]
             active = continuousVO.keypoint_trajectories.get_active()

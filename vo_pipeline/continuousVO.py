@@ -85,7 +85,7 @@ class ContinuousVO:
         # bootstrap initialization
         baseline = self.frame_queue.get(self.frames_to_skip - 1)
         T = self._bootstrap(baseline, idx, img)
-        frame_state = FrameState(idx, img, T, is_key=True)
+        frame_state = FrameState(idx, img, T, is_key=True, keypoints=self.bootstrap.kps)
         self.frame_queue.add(frame_state)
         self._add_keyframe(frame_state)
 
@@ -102,11 +102,11 @@ class ContinuousVO:
         if frame_idx in self.keypoint_trajectories.on_frame:
             del self.keypoint_trajectories.on_frame[frame_idx]
 
-        bootstrap = BootstrapInitializer(
+        self.bootstrap = BootstrapInitializer(
             baseline.img, img, self.K, max_point_dist=self.max_point_distance)
-        num_pts, _ = bootstrap.point_cloud.shape
+        num_pts, _ = self.bootstrap.point_cloud.shape
 
-        T = bootstrap.T @ baseline.pose
+        T = self.bootstrap.T @ baseline.pose
         bootstrap_scale = np.linalg.norm(T[0:3, 3])
 
         if world_transform is None:
@@ -119,7 +119,7 @@ class ContinuousVO:
             T[0:3, 3] *= rescaling_factor
 
         # transform landmarks to world frame
-        landmarks = bootstrap.point_cloud
+        landmarks = self.bootstrap.point_cloud
         new_landmarks = (hom_inv(baseline.pose) @ landmarks.T).T
 
         # initialize new trajectories
@@ -127,7 +127,7 @@ class ContinuousVO:
             landmark_id = len(self.keypoint_trajectories.landmarks)
             self.keypoint_trajectories.landmarks.append(new_landmarks[i, 0:3])
             trajectory, _ = self.keypoint_trajectories.create_trajectory(
-                frame_idx=frame_idx, pt=bootstrap.pts2[i, 0:2], transform=T, landmark_id=landmark_id)
+                frame_idx=frame_idx, pt=self.bootstrap.pts2[i, 0:2], transform=T, landmark_id=landmark_id)
         return T
 
     def _optimal_baseline(self) -> Tuple[FrameState, int]:
@@ -175,7 +175,8 @@ class ContinuousVO:
             self.bootstrap_idx.append(frame_idx)
 
         # save img to frame queue
-        frame_state = FrameState(frame_idx, img, T, tracked_kps=tracked_pts.shape[0], is_key=is_key)
+        kps, _ = self.descriptor.get_kp(img)
+        frame_state = FrameState(frame_idx, img, T, tracked_kps=tracked_pts.shape[0], is_key=is_key, keypoints=kps)
         self.frame_queue.add(frame_state)
         if is_key:
             self.keyframes.append(frame_state)
