@@ -82,7 +82,7 @@ class VIO:
 
             if self.viewer is not None:
                 if pose is not None:
-                    self.viewer.update_pose(pose.cam0_pose)
+                    self.viewer.update_pose(pose.cam_pose)
                 if landmark is not None:
                     self.viewer.update_landmarks(landmark)
 

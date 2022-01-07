@@ -1,82 +1,19 @@
-import numpy as np
+import pprint
+import time
+import warnings
 from copy import copy
 from typing import Dict, List, Tuple
-import warnings
-import pprint
 
-from numpy.lib.function_base import cov
+import numpy as np
 from params import *
 from scipy.stats import chi2
-from utils.quaternion import Quaternion
-from utils.message import IMUData, FeatureData, LandmarkData, PoseData
 from utils.matrix import skew
-
-import time
-
+from utils.message import FeatureData, IMUData, LandmarkData, PoseData
+from utils.quaternion import Quaternion
+from utils.states import CameraState, IMUState
 from utils.transform import HomTransform
+
 from vio_pipeline.feature import Feature
-
-
-class IMUState:
-    """
-    Stores the state estimate of the IMU at a time step. 
-    """
-    # id for the next IMUState
-    next_id = 0
-    # gravity in world frame (class level)
-    gravity = np.array([0, 0, -9.81])
-
-    # Transformation from IMU frame to body frame
-    # z-axis of the body frame should point upwards
-    T_imu_to_body = HomTransform.identity()
-
-    def __init__(self, state_id: int = None):
-        self.id = state_id
-        # time when state was recorded
-        self.timestamp: time.time = None
-
-        # Orientation from world frame to IMU frame
-        self.orientation_world_to_imu = Quaternion.identity()
-        # position of the IMU frame in world frame
-        self.position = np.zeros(3)
-        # velocity of the IMU in world frame
-        self.velocity = np.zeros(3)
-
-        # Biases for angular velocity
-        self.gyro_bias = np.zeros(3)
-        # Biases for acceleration
-        self.acc_bias = np.zeros(3)
-
-        # Modifyers for the observability matrix to have a proper
-        # null-space
-        self.orientation_null = Quaternion.identity()
-        self.position_null = np.zeros(3)
-        self.velocity_null = np.zeros(3)
-
-        # # Transformation from IMU to camera in IMU frame
-        self.R_imu_to_cam = np.eye(3)
-        self.t_imu_to_cam = np.zeros(3)
-
-
-class CameraState:
-    def __init__(self, id: int, timestamp: float, orientation: Quaternion,
-                 position: np.ndarray, orientation_null: Quaternion,
-                 position_null: np.ndarray) -> None:
-        self.id = id
-        self.timestamp: float = timestamp
-
-        # Orientation from world frame to camera frame
-        self.orientation = orientation
-        # Position of the camera frame in world frame
-        self.position = position
-
-        # These two variables should have the same physical
-        # interpretation with `orientation` and `position`.
-        # There two variables are used to modify the measurement
-        # Jacobian matrices to make the observability matrix
-        # have proper null space.
-        self.orientation_null = orientation_null
-        self.position_null = position_null
 
 
 class StateServer:
@@ -114,7 +51,8 @@ class StateServer:
 
 
 class MSCKF:
-    def __init__(self, T_imu_to_cam: HomTransform, T_imu_to_body: HomTransform) -> None:
+    def __init__(self, T_imu_to_cam: HomTransform,
+                 T_imu_to_body: HomTransform) -> None:
         self.optimization_config = OptimizationParams()
 
         # IMU data buffer
@@ -186,7 +124,8 @@ class MSCKF:
         # self.state_server.imu_state.orientation = Quaternion.from_rotation(np.eye(3))
         print(f"Initialized gravity vector: {IMUState.gravity},")
         print(
-            f"initial orientation: {self.state_server.imu_state.orientation_world_to_imu}")
+            f"initial orientation: {self.state_server.imu_state.orientation_world_to_imu}"
+        )
 
     def feature_callback(
             self, feature_msg: FeatureData) -> Tuple[PoseData, LandmarkData]:
@@ -499,7 +438,7 @@ class MSCKF:
         feature = self.map_server[feature_id]
 
         # Cam0 pose.
-        R_w_c0 = cam_state.orientation.to_rotation()
+        R_w_c0 = cam_state.orientation_world_to_cam.to_rotation()
         t_c0_w = cam_state.position
 
         # Cam1 pose.
@@ -657,7 +596,8 @@ class MSCKF:
         imu_state.position += delta_x_imu[12:15]
 
         dq_extrinsic = Quaternion.small_angle_quaternion(delta_x_imu[15:18])
-        imu_state.R_imu_to_cam = dq_extrinsic.to_rotation() @ imu_state.R_imu_to_cam
+        imu_state.R_imu_to_cam = dq_extrinsic.to_rotation(
+        ) @ imu_state.R_imu_to_cam
         imu_state.t_imu_to_cam += delta_x_imu[18:21]
 
         # Update the camera states.
@@ -665,7 +605,7 @@ class MSCKF:
                 cam_state) in enumerate(self.state_server.cam_states.items()):
             delta_x_cam = delta_x[21 + i * 6:27 + i * 6]
             dq_cam = Quaternion.small_angle_quaternion(delta_x_cam[:3])
-            cam_state.orientation = dq_cam * cam_state.orientation
+            cam_state.orientation_world_to_cam = dq_cam * cam_state.orientation_world_to_cam
             cam_state.position += delta_x_cam[3:]
 
         # Update state covariance.
@@ -681,15 +621,10 @@ class MSCKF:
         )
 
     def gating_test(self, H: np.ndarray, r: np.ndarray, dof: int) -> bool:
-        # try:
         P1 = H @ self.state_server.state_cov @ H.T
         P2 = OBSERVATION_NOISE * np.identity(H.shape[0])
         gamma = r @ np.linalg.solve(P1 + P2, r)
-        # gamma = np.abs(gamma)
-        threshold = self.chi_squared_test_table[dof]
-        return gamma < threshold
-        # except ValueError:
-        #     return False
+        return gamma < self.chi_squared_test_table[dof]
 
     def remove_lost_features(self) -> None:
         # Remove the features that lost track.
@@ -792,7 +727,7 @@ class MSCKF:
         # Pose of the key camera state.
         key_position = cam_state_pairs[key_cam_state_idx][1].position
         key_rotation = cam_state_pairs[key_cam_state_idx][
-            1].orientation.to_rotation()
+            1].orientation_world_to_cam.to_rotation()
 
         rm_cam_state_ids = []
 
@@ -801,7 +736,7 @@ class MSCKF:
         for i in range(2):
             position = cam_state_pairs[cam_state_idx][1].position
             rotation = cam_state_pairs[cam_state_idx][
-                1].orientation.to_rotation()
+                1].orientation_world_to_cam.to_rotation()
 
             distance = np.linalg.norm(position - key_position)
             angle = 2 * np.arccos(
@@ -995,9 +930,11 @@ class MSCKF:
         # print('   velocity:', imu_state.velocity)
         # print()
 
-        T_imu_to_world = HomTransform(imu_state.orientation_world_to_imu.to_rotation().T,
-                             imu_state.position)
-        T_body_to_world = IMUState.T_imu_to_body * T_imu_to_world * IMUState.T_imu_to_body.inverse()
+        T_imu_to_world = HomTransform(
+            imu_state.orientation_world_to_imu.to_rotation().T,
+            imu_state.position)
+        T_body_to_world = IMUState.T_imu_to_body * T_imu_to_world * IMUState.T_imu_to_body.inverse(
+        )
         body_velocity = IMUState.T_imu_to_body.R @ imu_state.velocity
 
         R_world_to_cam = imu_state.R_imu_to_cam @ T_imu_to_world.R.T
