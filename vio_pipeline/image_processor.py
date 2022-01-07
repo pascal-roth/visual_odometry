@@ -93,6 +93,7 @@ class ImageProcessor(object):
 
         # Detect new features on the frist image.
         new_features = self.detector.detect(img)
+        # new_features,_ = self.detector.get_kp(img)
 
         # Find the stereo matched points for the newly detected features.
         kpts = [kp.pt for kp in new_features]
@@ -294,7 +295,6 @@ class ImageProcessor(object):
                                u=curr_kpts[i][0],
                                v=curr_kpts[i][1]) for i in range(len(curr_ids))
         ]
-        print(self.num_features)
         return FeatureData(self.curr_frame.timestamp, features)
 
     def integrate_imu_data(self):

@@ -44,19 +44,20 @@ GYRO_NOISE = 0.005**2
 ACC_NOISE = 0.05**2
 GYRO_BIAS_NOISE = 0.001**2
 ACC_BIAS_NOISE = 0.01**2
-OBSERVATION_NOISE = 10**2
+OBSERVATION_NOISE = 0.01**2
 
-POSITION_DELTA_THRESHOLD = 1
-VELOCITY_DELTA_THRESHOLD = .5
+POSITION_DELTA_THRESHOLD = 2
+VELOCITY_DELTA_THRESHOLD = 1
 
 # Grid parameters
 # images have aspect ratio ~3.31
 GRID_RESOLUTION = 1
 GRID_ROW = 4 * GRID_RESOLUTION
-GRID_COL = 13 * GRID_RESOLUTION
+GRID_COL = 13  * GRID_RESOLUTION
 GRID_NUM = GRID_COL * GRID_ROW
-GRID_MIN_FEATURE = 3
-GRID_MAX_FEATURE = 5
+# minimal and maximal number of features per grid cell
+GRID_MIN_FEATURE = 2
+GRID_MAX_FEATURE = 10
 
 #
 # DISPLAY params:
@@ -88,7 +89,7 @@ class OptimizationParams(object):
     Configuration parameters for 3d feature position optimization.
     """
     def __init__(self):
-        self.translation_threshold = 0.2  # 0.2
+        self.translation_threshold = 0.1  # 0.2
         self.huber_epsilon = 0.01
         self.estimation_precision = 5e-7
         self.initial_damping = 1e-3

@@ -29,8 +29,8 @@ class IMUState:
     # z-axis of the body frame should point upwards
     T_body_imu = HomTransform.identity()
 
-    def __init__(self, id=None):
-        self.id = id
+    def __init__(self, state_id:int=None):
+        self.id = state_id
         # time when state was recorded
         self.timestamp: time.time = None
 
@@ -635,7 +635,6 @@ class MSCKF:
         delta_pos = delta_x_imu[12:15]
         norm_delta_vel = np.linalg.norm(delta_vel)
         norm_delta_pos = np.linalg.norm(delta_pos)
-        print(norm_delta_pos)
         if norm_delta_vel > VELOCITY_DELTA_THRESHOLD or norm_delta_pos > POSITION_DELTA_THRESHOLD:
             warnings.warn(
                 f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, "
@@ -670,15 +669,17 @@ class MSCKF:
 
         # Fix the covariance to be symmetric
         self.state_server.state_cov = (state_cov + state_cov.T) / 2.
+        print(
+            f"Updated IMU_state, delta position: {norm_delta_pos}, delta velocity:{norm_delta_vel}"
+        )
 
     def gating_test(self, H: np.ndarray, r: np.ndarray, dof: int) -> bool:
         # try:
         P1 = H @ self.state_server.state_cov @ H.T
         P2 = OBSERVATION_NOISE * np.identity(H.shape[0])
         gamma = r @ np.linalg.solve(P1 + P2, r)
-        gamma = np.abs(gamma)
+        # gamma = np.abs(gamma)
         threshold = self.chi_squared_test_table[dof]
-        # print(f"{gamma < threshold} gamma: {gamma} < chi2: {threshold}, {dof}")
         return gamma < threshold
         # except ValueError:
         #     return False
@@ -755,8 +756,10 @@ class MSCKF:
 
         H_x = H_x[:stack_count]
         r = r[:stack_count]
-        
-        print(f"num lost features: {len(processed_feature_ids)}, num invalid features: {len(invalid_feature_ids)}, stack count: {stack_count}")
+
+        print(
+            f"num lost features: {len(processed_feature_ids)}, num invalid features: {len(invalid_feature_ids)}, stack count: {stack_count}"
+        )
 
         # Perform the measurement update step.
         self.measurement_update(H_x, r)
