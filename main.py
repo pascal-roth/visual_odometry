@@ -149,16 +149,18 @@ def poseEstimation_example():
 
 def continuous_vo_example():
 
+    max_point_distance = 50
     if params.DATASET == "KITTI":
         dataset_type = DatasetType.KITTI
     elif params.DATASET == "PARKING":
         dataset_type = DatasetType.PARKING
+        max_point_distance = 200
     elif params.DATASET == "MALAGA":
         dataset_type = DatasetType.MALAGA
     else:
         raise NameError('WRONG DATASET NAME!')
     dataset = DatasetLoader(dataset_type).load()
-    continuousVO = ContinuousVO(dataset, frame_queue_size=250)
+    continuousVO = ContinuousVO(dataset, frame_queue_size=250, max_point_distance=max_point_distance)
 
     # plt_groud_truth(dataset)
     # plt_only_trajectory(continuousVO, dataset)
