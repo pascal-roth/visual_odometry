@@ -1,6 +1,7 @@
 import copy
 import logging
 
+import params
 from utils.loadData import DatasetLoader, DatasetType
 from vo_pipeline.featureExtraction import FeatureExtractor, ExtractorType
 from vo_pipeline.featureMatching import FeatureMatcher, MatcherType
@@ -147,11 +148,21 @@ def poseEstimation_example():
 
 
 def continuous_vo_example():
-    dataset = DatasetLoader(DatasetType.KITTI).load()
+
+    if params.DATASET == "KITTI":
+        dataset_type = DatasetType.KITTI
+    elif params.DATASET == "PARKING":
+        dataset_type = DatasetType.PARKING
+    elif params.DATASET == "MALAGA":
+        dataset_type = DatasetType.MALAGA
+    else:
+        raise NameError('WRONG DATASET NAME!')
+    dataset = DatasetLoader(dataset_type).load()
     continuousVO = ContinuousVO(dataset, frame_queue_size=250)
 
+    # plt_groud_truth(dataset)
+    # plt_only_trajectory(continuousVO, dataset)
     plt_online(continuousVO, dataset)
-    # plt_trajectory(continuousVO, dataset)
 
 
 def main():

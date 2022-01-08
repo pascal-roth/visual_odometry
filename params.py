@@ -1,6 +1,10 @@
 # General
-FRAME_QUEUE_SIZE = 100
 
+# Used dataset: KITTI, MALAGA, PARKING
+DATASET = "PARKING"
+
+# Queue size used in BA
+FRAME_QUEUE_SIZE = 100
 
 # Bootstrapping phase
 # Feature matching

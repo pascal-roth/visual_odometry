@@ -30,6 +30,15 @@ class KeypointTrajectories:
         ]
         return lks
 
+    def get_inactive(self) -> List[np.ndarray]:
+        inactive = []
+        inactive = [
+            self.landmarks[self.traj2landmark[t]]
+            for t in self.on_frame[self.latest_frame].keys()
+            if t not in self.traj2landmark
+        ]
+        return inactive
+
     def tracked_to(self,
                    traj_idx: int,
                    frame_idx: int,
