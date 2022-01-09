@@ -68,7 +68,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
         global tracked_kps
         global it
         fig.canvas.draw()
-
+        
         if continuousVO.step() is not None and len(
                 continuousVO.keypoint_trajectories.landmarks) > 0:
 
