@@ -183,6 +183,7 @@ class MSCKF:
         finally:
             # Reset the system if necessary
             self.online_reset()
+        return None, None
 
     def batch_imu_processing(self, time_bound: float) -> None:
         """Propagate the EKF state
@@ -582,7 +583,7 @@ class MSCKF:
         norm_delta_vel = np.linalg.norm(delta_vel)
         norm_delta_pos = np.linalg.norm(delta_pos)
         if norm_delta_vel > VELOCITY_DELTA_THRESHOLD or norm_delta_pos > POSITION_DELTA_THRESHOLD:
-            warnings.warn(
+            raise RuntimeError(
                 f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, "
                 f"||delta_pos|| = {norm_delta_pos}, "
                 f"small angle quaternion approximation will be inaccurate")

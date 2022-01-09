@@ -22,6 +22,8 @@ class Viewer(object):
         self.image_queue = Queue(maxsize=10)
         self.feature_queue = Queue()
         self.landmark_queue = Queue()
+        self.timestamp: float = 0
+        self.start_time = None
 
     def update_pose(self, pose: HomTransform):
         if pose is None:
@@ -134,6 +136,7 @@ class Viewer(object):
             if trajectory.size > 0:
                 sc_local_traj.set_offsets(trajectory[-20:, [x_idx, y_idx]])
             if landmarks is not None and landmarks.size > 0:
+                print("got landmarks")
                 landmarks = landmarks[:, [x_idx, y_idx]]
                 # plot landmarks and last 20 trajectory poses
                 sc_local_lks.set_offsets(landmarks)
@@ -154,6 +157,145 @@ class Viewer(object):
                 start_time = np.min(last_landmarks[:, 0])
                 sc_tracked_kps.set_data(last_landmarks[:, 0] - start_time, last_landmarks[:, 1])
             return image_show,
+
+        ani = animation.FuncAnimation(figure,
+                                      update,
+                                      blit=False,
+                                      interval=1000 / TARGET_FRAMERATE)
+        figure.tight_layout()
+        plt.show()
+
+    def plot_trajectory( self, max_time:float = 20):
+        # Create figure to draw on
+        figure = plt.figure()
+
+        # Full trajectory subplot
+        ax_full_traj = figure.add_subplot(111)
+        ax_full_traj.set_title("Full trajectory")
+        sc_full_traj, = ax_full_traj.plot([], [],
+                                          color="blue",
+                                          label="trajectory",
+                                          lw=2)
+
+        traj_list: List[np.ndarray] = []
+        num_landmarks: List[Tuple[float, int]] = []
+
+        # update function, run at every tick of self.timer
+        def update(i):
+            if self.start_time is None or self.timestamp - self.start_time < max_time:
+                x_idx = 0
+                y_idx = 2
+
+                # Update image plot
+                if not self.image_queue.empty():
+                    while not self.image_queue.empty():
+                        img_data = self.image_queue.get()
+
+                # plot full trajectory
+                while not self.pose_queue.empty():
+                    traj_list.append(self.pose_queue.get())
+
+                trajectory = np.array([pose[:3, 3] for pose in traj_list])
+                if trajectory.size > 0:
+                    sc_full_traj.set_data(trajectory[:, x_idx], trajectory[:,
+                                                                        y_idx])
+
+                    xy_min = np.min(trajectory, axis=0)
+                    xy_max = np.max(trajectory, axis=0)
+                    ax_full_traj.set_xlim(xy_min[x_idx] - 2, xy_max[x_idx] + 2)
+                    ax_full_traj.set_ylim(xy_min[y_idx] - 2, xy_max[y_idx] + 2)
+
+                # plot last 20 frames trajectory and landmarks
+                landmark = None
+                landmarks = None
+                while not self.landmark_queue.empty():
+                    landmark = self.landmark_queue.get()
+                    self.timestamp = landmark.timestamp
+                    if self.start_time is None:
+                        self.start_time = self.timestamp
+                    landmarks = landmark.landmarks
+            else:
+                print(f"max time {max_time}s reached, not updating plot anymore")
+
+            return sc_full_traj
+
+        ani = animation.FuncAnimation(figure,
+                                      update,
+                                      blit=False,
+                                      interval=1000 / TARGET_FRAMERATE)
+        figure.tight_layout()
+        plt.show()
+
+    def plot_landmarks(self):
+        # Create figure to draw on
+        figure = plt.figure()
+
+
+        # Trajectory of last 20 frames and landmarks subplot
+        ax_local_traj = figure.add_subplot(111)
+        ax_local_traj.set_title("Trajectory of last 20 frames and landmarks")
+        sc_local_traj = ax_local_traj.scatter([], [],
+                                              s=5,
+                                              color="blue",
+                                              marker="o",
+                                              label="trajectory")
+        sc_local_lks = ax_local_traj.scatter([], [],
+                                             s=3,
+                                             color="black",
+                                             marker="*",
+                                             label="landmarks")
+
+        traj_list: List[np.ndarray] = []
+        num_landmarks: List[Tuple[float, int]] = []
+        self.plotted = False
+        # update function, run at every tick of self.timer
+        def update(i):
+            if not self.plotted:
+                x_idx = 0
+                y_idx = 2
+
+                # Update image plot
+                if not self.image_queue.empty():
+                    while not self.image_queue.empty():
+                        img_data = self.image_queue.get()
+
+                # plot full trajectory
+                while not self.pose_queue.empty():
+                    traj_list.append(self.pose_queue.get())
+
+                trajectory = np.array([pose[:3, 3] for pose in traj_list])
+
+                # plot last 20 frames trajectory and landmarks
+                landmark = None
+                landmarks = None
+                while not self.landmark_queue.empty():
+                    landmark = self.landmark_queue.get()
+                    landmarks = landmark.landmarks
+
+                if trajectory.size > 0:
+                    sc_local_traj.set_offsets(trajectory[-20:, [x_idx, y_idx]])
+                if landmarks is not None and landmarks.size > 0:
+                    # self.plotted = True
+                    print("got landmarks")
+                    landmarks = landmarks[:, [x_idx, y_idx]]
+                    # plot landmarks and last 20 trajectory poses
+                    sc_local_lks.set_offsets(landmarks)
+
+                    # set plot limits to show all landmarks
+                    all_active = np.vstack((landmarks, trajectory[-20:,
+                                                                [x_idx, y_idx]]))
+                    xy_min = np.min(all_active, axis=0)
+                    xy_max = np.max(all_active, axis=0)
+                    ax_local_traj.set_xlim(xy_min[0] - 2, xy_max[0] + 2)
+                    ax_local_traj.set_ylim(xy_min[1] - 2, xy_max[1] + 2)
+
+                # plot number of tracked landmarks
+                if landmark is not None:
+                    num_landmarks.append((landmark.timestamp, len(landmarks)))
+                if len(num_landmarks) > 0:
+                    last_landmarks = np.array(num_landmarks)[-20:]
+                    start_time = np.min(last_landmarks[:, 0])
+            return sc_local_lks, sc_local_traj
 
         ani = animation.FuncAnimation(figure,
                                       update,

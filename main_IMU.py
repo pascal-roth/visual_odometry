@@ -107,5 +107,5 @@ if __name__ == "__main__":
     # create viewer on main thread, since otherwise matplotlib
     viewer = Viewer()
     vio = VIO(frame_queue, imu_queue, dataset, viewer)
-    viewer.start_vis()
+    viewer.plot_landmarks()
     
