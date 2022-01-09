@@ -23,7 +23,7 @@ class ContinuousVO:
                  matcherType=MatcherType.BF,
                  useKLT=True,
                  algo_method=AlgoMethod.P3P,
-                 max_point_distance: int = 50,
+                 max_point_distance: int = 100,
                  frames_to_skip: int = 10,
                  frame_queue_size: int = 1000) -> None:
 
