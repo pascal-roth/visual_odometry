@@ -182,18 +182,18 @@ class BootstrapInitializer:
         self.kps = kp1
 
         # match features
-        matching_ratio = 0
-        matching_threshold = MATCHING_THRESHOLD 
-        while matching_ratio < MATCHING_RATIO and matching_threshold < .9:
-            matcher = FeatureMatcher(MatcherType.FLANN,
-                                    k=2,
-                                    matching_threshold=matching_threshold)
-            matches = matcher.match_descriptors(des0, des1)
-            matching_ratio = len(matches) / min(des0.shape[0], des1.shape[0])
-            matching_threshold += 0.1
+        # matching_ratio = 0
+        # matching_threshold = MATCHING_THRESHOLD 
+        # while matching_ratio < MATCHING_RATIO and matching_threshold < .9:
+        matcher = FeatureMatcher(MatcherType.FLANN,
+                                k=2,
+                                matching_threshold=MATCHING_THRESHOLD)
+        matches = matcher.match_descriptors(des0, des1)
+            # matching_ratio = len(matches) / min(des0.shape[0], des1.shape[0])
+            # matching_threshold += 0.1
 
         print(
-            f"Bootstrapping features: ({des0.shape[0]}, {des1.shape[0]}), matches: {len(matches)}, threshold: {matching_threshold - 0.1}"
+            f"Bootstrapping features: ({des0.shape[0]}, {des1.shape[0]}), matches: {len(matches)}"
         )
         # matcher.match_plotter(self.img1, kp0, self.img2, kp1, matches)
 
@@ -272,4 +272,4 @@ class BootstrapInitializer:
     #     F = V[-1, :].reshape(3, 3).T
     #     u, s, v = np.linalg.svd(F)
     #     s[2] = 0
-    #     return u @ np.diag(s) @
+    #     return u @ np.diag(s) @ v

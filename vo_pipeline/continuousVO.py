@@ -24,7 +24,7 @@ class ContinuousVO:
                  useKLT=True,
                  algo_method=AlgoMethod.P3P,
                  max_point_distance: int = 50,
-                 frames_to_skip: int = 4,
+                 frames_to_skip: int = 10,
                  frame_queue_size: int = 1000) -> None:
 
         self.dataset = dataset
@@ -67,7 +67,7 @@ class ContinuousVO:
         try:
             K, img = next(self.dataset.frames)
         except StopIteration:
-            return None 
+            return None
 
         if self.frame_idx < self.frames_to_skip:
             self.K = K
@@ -110,8 +110,8 @@ class ContinuousVO:
         :param world_transform:
         :return: transform from baseline to img
         """
-        if frame_idx in self.keypoint_trajectories.on_frame:
-            del self.keypoint_trajectories.on_frame[frame_idx]
+        # if frame_idx in self.keypoint_trajectories.on_frame:
+        #     del self.keypoint_trajectories.on_frame[frame_idx]
 
         bootstrap = BootstrapInitializer(
             baseline.img, img, self.K, max_point_dist=self.max_point_distance)
@@ -125,15 +125,15 @@ class ContinuousVO:
 
         bootstrap_scale = np.linalg.norm(T[0:3, 3])
 
-        if world_transform is None:
-            # rescale T & landmarks to world scale
-            rescaling_factor = 1 / bootstrap_scale
-            T[0:3, 3] *= abs(rescaling_factor)
-        else:
-            world_scale = np.linalg.norm(world_transform[0:3, 3])
-            rescaling_factor = world_scale / bootstrap_scale
-            T[0:3, 3] *= abs(rescaling_factor)
-        print(rescaling_factor)
+        # if world_transform is None:
+        #     # rescale T & landmarks to world scale
+        #     rescaling_factor = 1 / bootstrap_scale
+        #     T[0:3, 3] *= abs(rescaling_factor)
+        # else:
+        #     world_scale = np.linalg.norm(world_transform[0:3, 3])
+        #     rescaling_factor = world_scale / bootstrap_scale
+        #     T[0:3, 3] *= abs(rescaling_factor)
+        # print(rescaling_factor)
 
         # transform landmarks to world frame
         landmarks = bootstrap.point_cloud
@@ -228,11 +228,12 @@ class ContinuousVO:
                 f"choosing prev_frame: {prev_idx}, prev_keyframe idx: {prev_keyframe.idx}"
             )
             # prev_keyframe = self.frame_queue.get(frame_idx - prev_idx - 1)
-            prev_keyframe = self.frame_queue.get(4)
-            T = self._bootstrap(prev_keyframe,
-                                frame_idx,
-                                img,
-                                world_transform=None) #T_bundle_adjustment)
+            prev_keyframe = self.frame_queue.get(2)
+            T = self._bootstrap(
+                prev_keyframe,
+                frame_idx,
+                img,
+                world_transform=prev_keyframe.pose)  #T_bundle_adjustment)
             self.bootstrap_idx.append(frame_idx)
 
         # save img to frame queue
@@ -272,7 +273,8 @@ class ContinuousVO:
     def _bundle_adjustment(self, frame_idx: int, T: np.ndarray):
         poses: List[np.ndarray] = []
         landmarks: List[np.ndarray] = []
-        prev_keyframe = self.keyframes[-1]
+        prev_keyframe = self.keyframes[max(
+            -BUNDLE_ADJUSTMENT_KEYFRAME_LOOK_BACK, -len(self.keyframes))]
         look_back = frame_idx - prev_keyframe.idx
         if look_back >= self.frame_queue.size:
             look_back = self.frame_queue.size - 1

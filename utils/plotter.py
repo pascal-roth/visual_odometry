@@ -6,6 +6,7 @@ import matplotlib.animation as animation
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.cm as cm
+import matplotlib
 
 tracked_kps = np.array([0, 0])
 it = 0
@@ -59,8 +60,8 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
                                          marker="*",
                                          label="landmarks")
 
-    for i in range(20):
-        continuousVO.step()
+    # for i in range(20):
+    #     continuousVO.step()
 
     def animate(i):
         global trajectory
