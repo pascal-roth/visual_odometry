@@ -103,7 +103,7 @@ class Feature(object):
 
         return J, r, w
 
-    def generate_initial_guess(self, T_c1_c2: HomTransform, z1: np.ndarray,
+    def generate_initial_guess(self, T_cam0_to_cam1: HomTransform, z1: np.ndarray,
                                z2: np.ndarray):
         """
         Compute the initial guess of the feature's 3d position using 
@@ -111,7 +111,7 @@ class Feature(object):
 
         Arguments:
             T_c1_c2: A rigid body transformation taking a vector from c2 frame 
-                to c1 frame. (Isometry3d)
+                to c1 frame. (HomTransform)
             z1: feature observation in c1 frame. (vec2)
             z2: feature observation in c2 frame. (vec2)
 
@@ -119,9 +119,9 @@ class Feature(object):
             p: Computed feature position in c1 frame. (vec3)
         """
         # Construct a least square problem to solve the depth.
-        m = T_c1_c2.R @ np.array([*z1, 1.0])
+        m = T_cam0_to_cam1.R @ np.array([*z1, 1.0])
         a = m[:2] - z2 * m[2]  # vec2
-        b = z2 * T_c1_c2.t[2] - T_c1_c2.t[:2]  # vec2
+        b = z2 * T_cam0_to_cam1.t[2] - T_cam0_to_cam1.t[:2]  # vec2
 
         # Solve for the depth.
         depth = a @ b / (a @ a)
