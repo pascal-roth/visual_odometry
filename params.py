@@ -40,6 +40,6 @@ KLT_MIN_EIGEN_THRESHOLD = 1e-2
 MAX_BASELINE_UNCERTAINTY = .15
 
 # minimal PnP / RANSAC inlier ratio from one frame to the next
-MIN_INLIER_RATIO = .2
+MIN_INLIER_RATIO = .5
 
 BA_DISTANCE_TH = 1e2

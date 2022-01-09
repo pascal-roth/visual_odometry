@@ -59,6 +59,9 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
                                          marker="*",
                                          label="landmarks")
 
+    for i in range(20):
+        continuousVO.step()
+
     def animate(i):
         global trajectory
         global tracked_kps

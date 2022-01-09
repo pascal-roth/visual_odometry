@@ -89,6 +89,9 @@ class ContinuousVO:
         """
         # bootstrap initialization
         baseline = self.frame_queue.get(self.frames_to_skip - 1)
+        # img2 = baseline.img
+        # baseline.img = img
+        # T = self._bootstrap(baseline, idx, img2)
         T = self._bootstrap(baseline, idx, img)
         frame_state = FrameState(idx, img, T, is_key=True)
         self.frame_queue.add(frame_state)
@@ -115,16 +118,22 @@ class ContinuousVO:
         num_pts, _ = bootstrap.point_cloud.shape
 
         T = bootstrap.T @ baseline.pose
+        # if not (baseline.pose == np.identity(4)).all():  # TODO: remove, just to prove a point
+        #     T = baseline.pose
+        # else:
+        #     T = bootstrap.T @ baseline.pose
+
         bootstrap_scale = np.linalg.norm(T[0:3, 3])
 
         if world_transform is None:
             # rescale T & landmarks to world scale
             rescaling_factor = 1 / bootstrap_scale
-            T[0:3, 3] *= rescaling_factor
+            T[0:3, 3] *= abs(rescaling_factor)
         else:
             world_scale = np.linalg.norm(world_transform[0:3, 3])
             rescaling_factor = world_scale / bootstrap_scale
-            T[0:3, 3] *= rescaling_factor
+            T[0:3, 3] *= abs(rescaling_factor)
+        print(rescaling_factor)
 
         # transform landmarks to world frame
         landmarks = bootstrap.point_cloud
@@ -194,8 +203,16 @@ class ContinuousVO:
                 traj_idx = trajectories[i]
                 self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
                                                       tracked_pt, T)
+
+        # if abs(T[0, 3] > 1.5 * abs(self.frame_queue.get(0).pose[0, 3])):
+        #     raise AssertionError('Locally not consistent')
+
         is_key = False
-        prev_keyframe = self.keyframes[-1]
+        try:
+            prev_keyframe = self.keyframes[-2]
+        except IndexError:
+            prev_keyframe = self.keyframes[-1]
+
         baseline_uncertainty = self._baseline_uncertainty(
             prev_keyframe.pose, T, tracked_landmarks)
         print(
@@ -203,18 +220,19 @@ class ContinuousVO:
         )
         if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY or inlier_ratio < MIN_INLIER_RATIO:
             is_key = True
-            T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)
+            # T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)
 
             # choose prev keyframe that is far away enough
             prev_idx = min(prev_keyframe.idx, frame_idx - MIN_FRAME_DIST)
             print(
                 f"choosing prev_frame: {prev_idx}, prev_keyframe idx: {prev_keyframe.idx}"
             )
-            prev_keyframe = self.frame_queue.get(frame_idx - prev_idx - 1)
+            # prev_keyframe = self.frame_queue.get(frame_idx - prev_idx - 1)
+            prev_keyframe = self.frame_queue.get(4)
             T = self._bootstrap(prev_keyframe,
                                 frame_idx,
                                 img,
-                                world_transform=T_bundle_adjustment)
+                                world_transform=None) #T_bundle_adjustment)
             self.bootstrap_idx.append(frame_idx)
 
         # save img to frame queue

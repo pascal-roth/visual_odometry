@@ -63,7 +63,7 @@ class PoseEstimation:
             img_key_points,
             self.K,
             distCoeffs=None,
-            flags=self.algo_method,
+            flags=0,   # self.algo_method,
             confidence=params.PNP_RANSAC_CONFIDENCE,
             iterationsCount=params.PNP_RANSAC_MAX_ITERS,
             reprojectionError=params.PNP_RANSAC_REPROJ_THRESHOLD)
@@ -74,6 +74,10 @@ class PoseEstimation:
         M = np.eye(4)
         M[0:3, 0:3] = R
         M[0:3, 3] = trans.ravel()
+        M[1, 3] = 0
+        M[2, 3] = 0
+        M[0:3, 0:3] = np.identity(3)
+
         return M, inliers
 
     def match_key_points(self, pointcloud: np.ndarray, img0: np.ndarray,
