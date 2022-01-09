@@ -67,6 +67,8 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
         global trajectory
         global tracked_kps
         global it
+        fig.canvas.draw()
+
         if continuousVO.step() is not None and len(
                 continuousVO.keypoint_trajectories.landmarks) > 0:
 
@@ -159,7 +161,6 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
                                                                           0])
 
             ax_tracked_kps.set_ylim(0, np.max(tracked_kps[-100:, 1]) + 20)
-
         return im, sc_landmarks, sc_keypoints, sc_full_traj, sc_tracked_kps, sc_local_traj, sc_local_lks
 
     ani = animation.FuncAnimation(fig, animate, blit=True)
