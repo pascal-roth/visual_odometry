@@ -30,3 +30,9 @@ Download and extract to `/datasets`.
 - RAM: 16GB
 - Number of used threads: 1 for VO, 6 for VIO
 
+## Video results
+
+- Parking: https://www.youtube.com/watch?v=YZMLS5fn0GQ
+- KITTI: https://www.youtube.com/watch?v=jE7d2QcfXvI
+- Malaga: https://www.youtube.com/watch?v=UsEHJoqeqWo
+
