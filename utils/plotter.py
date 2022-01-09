@@ -125,7 +125,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
 
             ax_tracked_kps.set_ylim(0, np.max(tracked_kps[-100:, 1])+20)
             # plt.show()
-        return im,
+        return im, sc_landmarks, sc_keypoints, sc_full_traj, sc_tracked_kps, sc_local_traj, sc_local_lks
 
     ani = animation.FuncAnimation(fig, animate, blit=True)
 

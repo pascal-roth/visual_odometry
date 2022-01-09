@@ -151,10 +151,13 @@ class ContinuousVO:
         tracked_landmarks = prev_landmarks[status]
 
         # Solve RANSAC P3P to extract rotation matrix and translation vector
+        inliers= None
         if tracked_landmarks.shape[0] > 5:
             T, inliers = self.poseEstimator.PnP(tracked_landmarks, tracked_pts)
             inlier_ratio = inliers.shape[0] / tracked_pts.shape[0]
         else:
+            print("too few points, forced bootstrap")
+            inlier_ratio = 1
             prev_keyframe = self.keyframes[-1]
             T = self._bootstrap(prev_keyframe, frame_idx, img, world_transform=self.frame_queue.queue[-1].pose)
             self.bootstrap_idx.append(frame_idx)
@@ -168,7 +171,7 @@ class ContinuousVO:
         for i, tracked_pt in enumerate(tracked_pts):
             traj_idx = trajectories[i]
             self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
-                                                  tracked_pt, T)
+                                                tracked_pt, T)
         is_key = False
         prev_keyframe = self.keyframes[-1]
         baseline_uncertainty = self._baseline_uncertainty(
@@ -176,7 +179,7 @@ class ContinuousVO:
         print(
             f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
-        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY:
+        if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY or inlier_ratio < MIN_INLIER_RATIO:
             # bootstrap
             is_key = True
             T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)

@@ -19,7 +19,11 @@ class FeatureExtractor:
 
     def get_extractor(self):
         if self.extractor_type == ExtractorType.SIFT:
-            self.extractor = cv.SIFT_create()
+            self.extractor = cv.SIFT_create(nfeatures=0,
+                                            nOctaveLayers=3,
+                                            contrastThreshold=0.09,
+                                            edgeThreshold=10,
+                                            sigma=1.6)
 
     def get_kp(self, img: np.ndarray) -> Tuple[List[Any], np.ndarray]:
         """

@@ -63,7 +63,10 @@ class PoseEstimation:
             img_key_points,
             self.K,
             distCoeffs=None,
-            flags=self.algo_method)
+            flags=self.algo_method,
+            confidence=params.PNP_RANSAC_CONFIDENCE,
+            iterationsCount=params.PNP_RANSAC_MAX_ITERS,
+            reprojectionError=params.PNP_RANSAC_REPROJ_THRESHOLD)
         assert success, "PNP RANSAC was not able to compute a pose from 2D - 3D correspondences"
 
         # Convert to homogeneous coordinates
@@ -124,6 +127,7 @@ class PoseEstimation:
             winSize=(params.KLT_RADIUS, params.KLT_RADIUS),
             maxLevel=params.KLT_NUM_PYRAMIDS,
             minEigThreshold=params.KLT_MIN_EIGEN_THRESHOLD,
-            criteria=(cv.TermCriteria_COUNT | cv.TermCriteria_EPS, params.KLT_N_ITERS, 0.001),
+            criteria=(cv.TermCriteria_COUNT | cv.TermCriteria_EPS,
+                      params.KLT_N_ITERS, 0.001),
             flags=cv.OPTFLOW_LK_GET_MIN_EIGENVALS)
         return tracked_pts, status

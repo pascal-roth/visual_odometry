@@ -11,8 +11,11 @@ from params import *
 
 
 class BootstrapInitializer:
-
-    def __init__(self, img1: np.ndarray, img2: np.ndarray, K: np.ndarray, max_point_dist: float = 100):
+    def __init__(self,
+                 img1: np.ndarray,
+                 img2: np.ndarray,
+                 K: np.ndarray,
+                 max_point_dist: float = 100):
         """
 
         :param img1: image1
@@ -36,7 +39,8 @@ class BootstrapInitializer:
         self.pts_des1 = pts_des1
         # feature vectors corresponding to img2, same order as pts2,  (num_matches, 128)
         self.pts_des2 = pts_des2
-        T, point_cloud, mask = self._transform_matrix(self.F, self.pts1, self.pts2)
+        T, point_cloud, mask = self._transform_matrix(self.F, self.pts1,
+                                                      self.pts2)
 
         # homogeneous transform T_img1,img0, (4,4)
         self.T = T
@@ -52,7 +56,6 @@ class BootstrapInitializer:
 
         # Save kps of second img
         self.kps = None
-
 
     # def select_baseline(self):
     #     img0 = None
@@ -70,8 +73,9 @@ class BootstrapInitializer:
     #             uncertainty = BootstrapInitializer.get_baseline_uncertainty(T, point_cloud)
     #             print(uncertainty)
 
-    def _transform_matrix(self, F: np.ndarray, pts1: np.ndarray, pts2: np.ndarray) -> Tuple[
-        np.ndarray, np.ndarray, np.ndarray]:
+    def _transform_matrix(
+            self, F: np.ndarray, pts1: np.ndarray,
+            pts2: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Computes homogeneous transform T.
         :param F: Fundamental matrix, (3, 3)
@@ -82,9 +86,7 @@ class BootstrapInitializer:
         # get essential matrix
         E = self.K.T @ F @ self.K
 
-        W = np.array([[0, -1, 0],
-                      [1, 0, 0],
-                      [0, 0, 1]])
+        W = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
         U, _, VT = np.linalg.svd(E)
         R1 = U @ W @ VT
         R2 = U @ W.T @ VT
@@ -109,9 +111,11 @@ class BootstrapInitializer:
             for u_hat in [-u, u]:
                 T_hat = np.hstack((R_hat, u_hat))
                 M2 = self.K @ T_hat
-                P_cam1 = BootstrapInitializer._linear_triangulation(pts1, pts2, M1, M2)
+                P_cam1 = BootstrapInitializer._linear_triangulation(
+                    pts1, pts2, M1, M2)
                 P_cam2 = (T_hat @ P_cam1.T).T
-                num_in_font = np.sum(P_cam1[:, 2] > 0) + np.sum(P_cam2[:, 2] > 0)
+                num_in_font = np.sum(P_cam1[:, 2] > 0) + np.sum(
+                    P_cam2[:, 2] > 0)
                 if num_in_font > most_pts_in_front:
                     R = R_hat
                     t = u_hat
@@ -124,17 +128,21 @@ class BootstrapInitializer:
         T[0:3, 3] = t.ravel()
         # filter point cloud for feasible points
         min_real_z = min(0, cam2_W[2])
-        close_enough = np.linalg.norm(point_cloud[:, 0:3], axis=1) <= self.max_point_dist
+        close_enough = np.linalg.norm(point_cloud[:, 0:3],
+                                      axis=1) <= self.max_point_dist
         in_front_cam = point_cloud[:, 2] > min_real_z
         mask = close_enough & in_front_cam
         num_rejected = np.sum(~mask)
-        logging.info(f"Rejected {num_rejected} points during 3D reconstruction.")
+        logging.info(
+            f"Rejected {num_rejected} points during 3D reconstruction.")
         return T, point_cloud, mask
 
     @staticmethod
-    def _linear_triangulation(pts1: np.ndarray, pts2: np.ndarray, M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
+    def _linear_triangulation(pts1: np.ndarray, pts2: np.ndarray,
+                              M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
         assert pts1.shape == pts2.shape, "The number of matched points in both images has to be the same"
-        assert M1.shape == M2.shape == (3, 4), "Homogeneous projection matrices have be of shape (3,4)"
+        assert M1.shape == M2.shape == (
+            3, 4), "Homogeneous projection matrices have be of shape (3,4)"
         n_pts, _ = pts1.shape
         P = np.zeros((n_pts, 4), dtype=np.float32)
         for i in range(n_pts):
@@ -157,8 +165,10 @@ class BootstrapInitializer:
     #     logging.info(f"Rejected {num_rejected} points during 3D reconstruction.")
     #     return mask
 
-    def _estimate_fundamental(self, normalize=False) -> Tuple[
-        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _estimate_fundamental(
+        self,
+        normalize=False
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Estimates the fundamental matrix F given two images
         (Solves the bootstrapping problem)
@@ -172,8 +182,20 @@ class BootstrapInitializer:
         self.kps = kp1
 
         # match features
-        matcher = FeatureMatcher(MatcherType.FLANN, k=2, matching_threshold=MATCHING_THRESHOLD)
-        matches = matcher.match_descriptors(des0, des1)
+        matching_ratio = 0
+        matching_threshold = MATCHING_THRESHOLD 
+        while matching_ratio < MATCHING_RATIO:
+            assert matching_threshold < 1
+            matcher = FeatureMatcher(MatcherType.FLANN,
+                                    k=2,
+                                    matching_threshold=matching_threshold)
+            matches = matcher.match_descriptors(des0, des1)
+            matching_ratio = len(matches) / min(des0.shape[0], des1.shape[0])
+            matching_threshold += 0.1
+
+        print(
+            f"Bootstrapping features: ({des0.shape[0]}, {des1.shape[0]}), matches: {len(matches)}, threshold: {matching_threshold - 0.1}"
+        )
         # matcher.match_plotter(self.img1, kp0, self.img2, kp1, matches)
 
         # 2D hom. matched points (num_matches, 3)
@@ -200,27 +222,35 @@ class BootstrapInitializer:
         def normalize_pts(pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
             mean = np.mean(pts[:, 0:2], axis=0)
             centered = pts[:, 0:2] - mean
-            sigma = np.sqrt(np.mean(np.sum(centered ** 2, axis=1)))
+            sigma = np.sqrt(np.mean(np.sum(centered**2, axis=1)))
             s = np.sqrt(2) / sigma
-            T = np.array([[s, 0, -s * mean[0]],
-                          [0, s, -s * mean[1]],
-                          [0, 0, 1]], dtype=np.float32)
+            T = np.array(
+                [[s, 0, -s * mean[0]], [0, s, -s * mean[1]], [0, 0, 1]],
+                dtype=np.float32)
             return (T @ pts.T).T, T
 
         # normalize pts for better numerical conditioning
         if normalize:
             norm_pts0, T_1 = normalize_pts(pts0)
             norm_pts1, T_2 = normalize_pts(pts1)
-            F, mask = cv2.findFundamentalMat(norm_pts0[:, 0:2], norm_pts1[:, 0:2], cv2.FM_RANSAC,
-                                             ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
-                                             confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
+            F, mask = cv2.findFundamentalMat(
+                norm_pts0[:, 0:2],
+                norm_pts1[:, 0:2],
+                cv2.FM_RANSAC,
+                ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
+                confidence=RANSAC_CONFIDENCE,
+                maxIters=RANSAC_MAX_ITERS)
             # F = self.fundamental(norm_pts0,norm_pts1)
             # unnormalize fundamental matrix
             F = T_2.T @ F @ T_1
         else:
-            F, mask = cv2.findFundamentalMat(pts0[:, 0:2], pts1[:, 0:2], cv2.FM_RANSAC,
-                                             ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
-                                             confidence=RANSAC_CONFIDENCE, maxIters=RANSAC_MAX_ITERS)
+            F, mask = cv2.findFundamentalMat(
+                pts0[:, 0:2],
+                pts1[:, 0:2],
+                cv2.FM_RANSAC,
+                ransacReprojThreshold=RANSAC_REPROJ_THRESHOLD,
+                confidence=RANSAC_CONFIDENCE,
+                maxIters=RANSAC_MAX_ITERS)
             # F = self.fundamental(pts0, pts1)
 
         # select only inlier points
@@ -243,4 +273,4 @@ class BootstrapInitializer:
     #     F = V[-1, :].reshape(3, 3).T
     #     u, s, v = np.linalg.svd(F)
     #     s[2] = 0
-    #     return u @ np.diag(s) @ 
+    #     return u @ np.diag(s) @
