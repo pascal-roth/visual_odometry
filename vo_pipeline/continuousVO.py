@@ -220,7 +220,7 @@ class ContinuousVO:
         )
         if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY or inlier_ratio < MIN_INLIER_RATIO:
             is_key = True
-            # T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)
+            T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)
 
             # choose prev keyframe that is far away enough
             prev_idx = min(prev_keyframe.idx, frame_idx - MIN_FRAME_DIST)
