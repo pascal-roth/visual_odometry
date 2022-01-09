@@ -21,7 +21,7 @@ class FeatureExtractor:
         if self.extractor_type == ExtractorType.SIFT:
             self.extractor = cv.SIFT_create(nfeatures=0,
                                             nOctaveLayers=3,
-                                            contrastThreshold=0.09,
+                                            contrastThreshold=0.03,
                                             edgeThreshold=10,
                                             sigma=1.6)
 

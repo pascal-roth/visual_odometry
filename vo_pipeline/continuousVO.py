@@ -64,8 +64,11 @@ class ContinuousVO:
         - after n-th frame pass them to _process_frame
         :return: index of last reconstructed frame
         """
+        try:
+            K, img = next(self.dataset.frames)
+        except StopIteration:
+            return None 
 
-        K, img = next(self.dataset.frames)
         if self.frame_idx < self.frames_to_skip:
             self.K = K
             self.frame_queue.add(
@@ -163,7 +166,7 @@ class ContinuousVO:
         inliers = None
         if tracked_landmarks.shape[0] > 5:
             T, inliers = self.poseEstimator.PnP(tracked_landmarks, tracked_pts)
-            inlier_ratio = inliers.shape[0] / self.inlier_count 
+            inlier_ratio = inliers.shape[0] / self.inlier_count
         else:
             warnings.warn("too few points, forced bootstrap")
             inlier_ratio = 1

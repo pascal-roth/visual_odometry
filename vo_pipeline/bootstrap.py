@@ -184,8 +184,7 @@ class BootstrapInitializer:
         # match features
         matching_ratio = 0
         matching_threshold = MATCHING_THRESHOLD 
-        while matching_ratio < MATCHING_RATIO:
-            assert matching_threshold < 1
+        while matching_ratio < MATCHING_RATIO and matching_threshold < .9:
             matcher = FeatureMatcher(MatcherType.FLANN,
                                     k=2,
                                     matching_threshold=matching_threshold)
