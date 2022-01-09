@@ -154,7 +154,7 @@ def continuous_vo_example():
         dataset_type = DatasetType.KITTI
     elif params.DATASET == "PARKING":
         dataset_type = DatasetType.PARKING
-        max_point_distance = 150
+        max_point_distance = 40
     elif params.DATASET == "MALAGA":
         dataset_type = DatasetType.MALAGA
     else:
