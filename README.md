@@ -10,38 +10,22 @@
 | Name                        | URL                                                                                               |
 | --------------------------- | ------------------------------------------------------------------------------------------------- |
 | KITTI with IMU measurements | [kitti_IMU_v3](https://polybox.ethz.ch/index.php/s/b3aGsvAY22wcdOk) (1.3 GB)                      |
-| kitti05                     | [kitti05](http://rpg.ifi.uzh.ch/docs/teaching/2021/kitti05.zip) (1.4 GB)                          |
-| Malaga 07                   | [malaga07](http://rpg.ifi.uzh.ch/docs/teaching/2021/malaga-urban-dataset-extract-07.zip) (4.4 GB) |
-| Parking garage              | [parking](http://rpg.ifi.uzh.ch/docs/teaching/2021/parking.zip) (208.3 MB)                        |
 
 Download and extract to `/datasets`.
 
-Vision Algorithm Project
 
-1. Bootstrapping 2D <-> 2D point correspondences
+## Running the pipeline
 
-- SIFT Feature Detector and Descriptor
-  - Non- max suppression ?
-- 5-point / 8-point Algorithm
-  - RANSAC
-  - Heuristic to choose the first two keyframes
+1) Download the above datasets and extract them to `/datasets` with the directory names:
+`kitti_IMU`.
+2) Choose the desired dataset in the `params.py` file.
+3) Run `python main.py`.
+4) Enjoy our VO pipeline :)
 
-2. Continuous VO
+## Computer characteristics
 
-- Feature Detector SIFT
-- Feature Matching
-- P3P / RANSAC
-  - get translation / rotation
-- Heuristic when new landmarks are necessary
-  - find some theory
-  - try simple threshold (20% less feature matches than in the previous image)
-- Bundle Ajdustment / Pose Graph Optimization
-  - decide how often we need to do it?
-  - matching with previous frames (parallel)
+- CPU frequency: 2.8 GHz
+- RAM: 16GB
+- Number of used threads: 1 for VO, 6 for VIO
 
-3. Bonus Feature
 
-- Loop Closure via Bundle Adjustmen
-  - current datasets don’t have loops!!
-- alternative: scale drift reduction
-  - need to find some papers describing how to do that
