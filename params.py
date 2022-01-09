@@ -13,19 +13,19 @@ FRAME_QUEUE_SIZE = 100
 # minimal distance ratio the second closest point has to be away from a match
 MATCHING_THRESHOLD: float = 0.6
 MATCHING_RATIO = 0.1
+MIN_FRAME_DIST = 5
 
 # Bootstrapping phase
 #
 # RANSAC Fundamental matrix estimation
-RANSAC_REPROJ_THRESHOLD: float = .9
-RANSAC_CONFIDENCE: float = 0.99
+RANSAC_REPROJ_THRESHOLD: float = 1
+RANSAC_CONFIDENCE: float = 0.999
 RANSAC_MAX_ITERS: int = 1000
 
 # PnP
-PNP_RANSAC_REPROJ_THRESHOLD: float = 4
-PNP_RANSAC_CONFIDENCE: float = 0.99
-PNP_RANSAC_MAX_ITERS: int = 200
-
+PNP_RANSAC_REPROJ_THRESHOLD: float = 2
+PNP_RANSAC_CONFIDENCE: float = 0.999
+PNP_RANSAC_MAX_ITERS: int = 2000
 
 # KLT Parameters
 KLT_RADIUS = 21
@@ -37,9 +37,9 @@ KLT_MIN_EIGEN_THRESHOLD = 1e-2
 # maximal baseline uncertainty threshold.
 # if the baseline uncertainty is larger than this value,
 # re-bootstrappign will occur
-MAX_BASELINE_UNCERTAINTY = .3
+MAX_BASELINE_UNCERTAINTY = .2
 
 # minimal PnP / RANSAC inlier ratio from one frame to the next
-MIN_INLIER_RATIO = .75
+MIN_INLIER_RATIO = 0
 
 BA_DISTANCE_TH = 1e2

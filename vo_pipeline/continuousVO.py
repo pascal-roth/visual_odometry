@@ -11,6 +11,7 @@ from vo_pipeline.frameState import FrameState
 from vo_pipeline.bundleAdjustment import BundleAdjustment
 from params import *
 import cv2 as cv
+import warnings
 
 import numpy as np
 
@@ -53,6 +54,7 @@ class ContinuousVO:
 
         self.frame_idx = 0
         self.bootstrap_idx: List[int] = []
+        self.inlier_count = 0
 
     def step(self) -> FrameState:
         """
@@ -89,8 +91,11 @@ class ContinuousVO:
         self.frame_queue.add(frame_state)
         self._add_keyframe(frame_state)
 
-    def _bootstrap(self, baseline: FrameState, frame_idx: int,
-                   img: np.ndarray, world_transform: np.ndarray = None) -> np.ndarray:
+    def _bootstrap(self,
+                   baseline: FrameState,
+                   frame_idx: int,
+                   img: np.ndarray,
+                   world_transform: np.ndarray = None) -> np.ndarray:
         """
 
         :param baseline:
@@ -123,11 +128,15 @@ class ContinuousVO:
         new_landmarks = (hom_inv(baseline.pose) @ landmarks.T).T
 
         # initialize new trajectories
+        self.inlier_count = num_pts
         for i in range(num_pts):
             landmark_id = len(self.keypoint_trajectories.landmarks)
             self.keypoint_trajectories.landmarks.append(new_landmarks[i, 0:3])
             trajectory, _ = self.keypoint_trajectories.create_trajectory(
-                frame_idx=frame_idx, pt=bootstrap.pts2[i, 0:2], transform=T, landmark_id=landmark_id)
+                frame_idx=frame_idx,
+                pt=bootstrap.pts2[i, 0:2],
+                transform=T,
+                landmark_id=landmark_id)
         return T
 
     def _optimal_baseline(self) -> Tuple[FrameState, int]:
@@ -151,27 +160,37 @@ class ContinuousVO:
         tracked_landmarks = prev_landmarks[status]
 
         # Solve RANSAC P3P to extract rotation matrix and translation vector
-        inliers= None
+        inliers = None
         if tracked_landmarks.shape[0] > 5:
             T, inliers = self.poseEstimator.PnP(tracked_landmarks, tracked_pts)
-            inlier_ratio = inliers.shape[0] / tracked_pts.shape[0]
+            inlier_ratio = inliers.shape[0] / self.inlier_count 
         else:
-            print("too few points, forced bootstrap")
+            warnings.warn("too few points, forced bootstrap")
             inlier_ratio = 1
             prev_keyframe = self.keyframes[-1]
-            T = self._bootstrap(prev_keyframe, frame_idx, img, world_transform=self.frame_queue.queue[-1].pose)
+            T = self._bootstrap(
+                prev_keyframe,
+                frame_idx,
+                img,
+                world_transform=self.frame_queue.queue[-1].pose)
             self.bootstrap_idx.append(frame_idx)
-            frame_state = FrameState(frame_idx, img, T, tracked_kps=tracked_pts.shape[0], is_key=True)
+            frame_state = FrameState(frame_idx,
+                                     img,
+                                     T,
+                                     tracked_kps=tracked_pts.shape[0],
+                                     is_key=True)
             self.frame_queue.add(frame_state)
             self.keyframes.append(frame_state)
             return
 
         # add tracked points
+        inliers = set(inliers.ravel()) if inliers is not None else None
         trajectories = prev_trajectories[status]
         for i, tracked_pt in enumerate(tracked_pts):
-            traj_idx = trajectories[i]
-            self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
-                                                tracked_pt, T)
+            if inliers is None or i in inliers:
+                traj_idx = trajectories[i]
+                self.keypoint_trajectories.tracked_to(traj_idx, frame_idx,
+                                                      tracked_pt, T)
         is_key = False
         prev_keyframe = self.keyframes[-1]
         baseline_uncertainty = self._baseline_uncertainty(
@@ -180,14 +199,27 @@ class ContinuousVO:
             f"{frame_idx}: tracked_pts: {tracked_pts.shape[0]:>5}, inlier_ratio: {inlier_ratio:.2f}, baseline uncertainty: {baseline_uncertainty:.2f}"
         )
         if baseline_uncertainty > MAX_BASELINE_UNCERTAINTY or inlier_ratio < MIN_INLIER_RATIO:
-            # bootstrap
             is_key = True
             T_bundle_adjustment = self._bundle_adjustment(frame_idx, T)
-            T = self._bootstrap(prev_keyframe, frame_idx, img, world_transform=T_bundle_adjustment)
+
+            # choose prev keyframe that is far away enough
+            prev_idx = min(prev_keyframe.idx, frame_idx - MIN_FRAME_DIST)
+            print(
+                f"choosing prev_frame: {prev_idx}, prev_keyframe idx: {prev_keyframe.idx}"
+            )
+            prev_keyframe = self.frame_queue.get(frame_idx - prev_idx - 1)
+            T = self._bootstrap(prev_keyframe,
+                                frame_idx,
+                                img,
+                                world_transform=T_bundle_adjustment)
             self.bootstrap_idx.append(frame_idx)
 
         # save img to frame queue
-        frame_state = FrameState(frame_idx, img, T, tracked_kps=tracked_pts.shape[0], is_key=is_key)
+        frame_state = FrameState(frame_idx,
+                                 img,
+                                 T,
+                                 tracked_kps=tracked_pts.shape[0],
+                                 is_key=is_key)
         self.frame_queue.add(frame_state)
         if is_key:
             self.keyframes.append(frame_state)
@@ -206,11 +238,13 @@ class ContinuousVO:
             d = np.dot(landmark, camera_normal.ravel())
             if d > 0:
                 depths.append(d)
-        depth = np.mean(depths)
 
+        if len(depths) == 0:
+            return np.inf
+        depth = np.mean(depths)
         # distance of the two poses
-        init = T0_inv[0:3, 3]
-        final = T1_inv[0:3, 3]
+        init = T0_inv[:3, 3]
+        final = T1_inv[:3, 3]
         dist = np.linalg.norm(final - init)
         return float(dist / depth)
 
@@ -259,7 +293,10 @@ class ContinuousVO:
         adjusted_poses, adjusted_landmarks = self.bundle_adjustment.bundle_adjustment(
             poses_np, landmarks_np, camera_indices_np, point_indices_np,
             keypoints_np)
-        adjusted_poses_hom = [np.vstack((pose, np.array([[0, 0, 0, 1]], dtype=np.float32))) for pose in adjusted_poses]
+        adjusted_poses_hom = [
+            np.vstack((pose, np.array([[0, 0, 0, 1]], dtype=np.float32)))
+            for pose in adjusted_poses
+        ]
 
         # move adjusted poses back to prev_keyframe transform
         # first_pose = adjusted_poses_hom[0]
