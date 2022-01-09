@@ -124,7 +124,7 @@ def plt_online(continuousVO: ContinuousVO, dataset: Dataset):
                 ax_tracked_kps.set_xlim(tracked_kps[-100, 0], tracked_kps[-1, 0])
 
             ax_tracked_kps.set_ylim(0, np.max(tracked_kps[-100:, 1])+20)
-            plt.show()
+            # plt.show()
         return im,
 
     ani = animation.FuncAnimation(fig, animate, blit=True)
