@@ -24,3 +24,9 @@ Download and extract to `/datasets`.
 3) Run `python main.py`.
 4) Enjoy our VO pipeline :)
 
+## Computer characteristics
+
+- CPU frequency: 2.8 GHz
+- RAM: 16GB
+- Number of used threads: 1 for VO, 6 for VIO
+
