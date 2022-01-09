@@ -5,7 +5,7 @@ FRAME_QUEUE_SIZE = 100
 
 # Bootstrapping phase
 # Feature matching
-MATCHING_THRESHOLD: float = 0.6
+MATCHING_THRESHOLD: float = 0.8
 
 # RANSAC Fundamental matrix estimation
 RANSAC_REPROJ_THRESHOLD: float = .5
@@ -29,8 +29,8 @@ BA_DISTANCE_TH = 1e2
 #
 
 # Number of samples to use for estimating the gravity vector
-GRAVITY_ESTIMATION_SAMPLES: int = 50
-CHI2_CONFIDENCE = 0.95
+GRAVITY_ESTIMATION_SAMPLES: int = 5
+CHI2_CONFIDENCE = 0.6
 
 # Initial covariance of orientation and position
 VELOCITY_COV = 0.25
@@ -49,14 +49,17 @@ OBSERVATION_NOISE = 10**2
 POSITION_DELTA_THRESHOLD = 1
 VELOCITY_DELTA_THRESHOLD = .5
 
+MAX_FEATURE_DISTANCE = 100
+
 # Grid parameters
 # images have aspect ratio ~3.31
-GRID_RESOLUTION = 1
+GRID_RESOLUTION = 2
 GRID_ROW = 4 * GRID_RESOLUTION
 GRID_COL = 13 * GRID_RESOLUTION
 GRID_NUM = GRID_COL * GRID_ROW
-GRID_MIN_FEATURE = 3
-GRID_MAX_FEATURE = 5
+# minimal and maximal number of features per grid cell
+GRID_MIN_FEATURE = 2
+GRID_MAX_FEATURE = 10
 
 #
 # DISPLAY params:
@@ -88,7 +91,7 @@ class OptimizationParams(object):
     Configuration parameters for 3d feature position optimization.
     """
     def __init__(self):
-        self.translation_threshold = 0.2  # 0.2
+        self.translation_threshold = 0.1  # 0.2
         self.huber_epsilon = 0.01
         self.estimation_precision = 5e-7
         self.initial_damping = 1e-3

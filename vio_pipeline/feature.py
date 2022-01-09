@@ -1,5 +1,7 @@
 import numpy as np
 from typing import Dict, Tuple, List
+from params import MAX_FEATURE_DISTANCE, OptimizationParams
+from utils.states import CameraState
 
 from utils.transform import HomTransform
 
@@ -12,7 +14,9 @@ class Feature(object):
     # R_cam0_cam1 = np.eye(3)
     # t_cam0_cam1 = np.zeros(3)
 
-    def __init__(self, new_id=0, optimization_config=None):
+    def __init__(self,
+                 new_id=0,
+                 optimization_config: OptimizationParams = None):
         # An unique identifier for the feature.
         self.id = new_id
 
@@ -99,7 +103,7 @@ class Feature(object):
 
         return J, r, w
 
-    def generate_initial_guess(self, T_c1_c2: HomTransform, z1: np.ndarray,
+    def generate_initial_guess(self, T_cam0_to_cam1: HomTransform, z1: np.ndarray,
                                z2: np.ndarray):
         """
         Compute the initial guess of the feature's 3d position using 
@@ -107,7 +111,7 @@ class Feature(object):
 
         Arguments:
             T_c1_c2: A rigid body transformation taking a vector from c2 frame 
-                to c1 frame. (Isometry3d)
+                to c1 frame. (HomTransform)
             z1: feature observation in c1 frame. (vec2)
             z2: feature observation in c2 frame. (vec2)
 
@@ -115,9 +119,9 @@ class Feature(object):
             p: Computed feature position in c1 frame. (vec3)
         """
         # Construct a least square problem to solve the depth.
-        m = T_c1_c2.R @ np.array([*z1, 1.0])
+        m = T_cam0_to_cam1.R @ np.array([*z1, 1.0])
         a = m[:2] - z2 * m[2]  # vec2
-        b = z2 * T_c1_c2.t[2] - T_c1_c2.t[:2]  # vec2
+        b = z2 * T_cam0_to_cam1.t[2] - T_cam0_to_cam1.t[:2]  # vec2
 
         # Solve for the depth.
         depth = a @ b / (a @ a)
@@ -125,7 +129,7 @@ class Feature(object):
         p = np.array([*z1, 1.0]) * depth
         return p
 
-    def check_baseline(self, cam_states):
+    def check_baseline(self, cam_states: Dict[int, CameraState]):
         """
         Check the input camera poses to ensure there is enough translation 
         to triangulate the feature
@@ -145,11 +149,11 @@ class Feature(object):
         last_id = observation_ids[-1]
 
         first_cam_pose = HomTransform(
-            cam_states[first_id].orientation.to_rotation().T,
+            cam_states[first_id].orientation_world_to_cam.to_rotation().T,
             cam_states[first_id].position)
 
         last_cam_pose = HomTransform(
-            cam_states[last_id].orientation.to_rotation().T,
+            cam_states[last_id].orientation_world_to_cam.to_rotation().T,
             cam_states[last_id].position)
 
         # Get the direction of the feature when it is first observed.
@@ -169,7 +173,7 @@ class Feature(object):
         return (np.linalg.norm(orthogonal_translation) >
                 self.optimization_config.translation_threshold)
 
-    def initialize_position(self, cam_states):
+    def initialize_position(self, cam_states: Dict[int, CameraState]):
         """
         Initialize the feature position based on all current available 
         measurements.
@@ -201,28 +205,28 @@ class Feature(object):
 
             # This camera pose will take a vector from this camera frame
             # to the world frame.
-            cam0_pose = HomTransform(cam_state.orientation.to_rotation().T,
-                                     cam_state.position)
-            # cam1_pose = cam0_pose * T_cam1_cam0
+            T_cam_to_world = HomTransform(
+                cam_state.orientation_world_to_cam.to_rotation().T,
+                cam_state.position)
 
-            cam_poses.append(cam0_pose)
+            cam_poses.append(T_cam_to_world)
             # cam_poses.append(cam1_pose)
-            # TODO: is the inverse the proper transform here?
-            # cam0_pose = HomTransform(cam_state.orientation.to_rotation(),
-            #                          cam_state.position).inverse()
 
         # All camera poses should be modified such that it takes a vector
         # from the first camera frame in the buffer to this camera frame.
-        T_c0_w = cam_poses[0]
+        T_cam0_to_world = cam_poses[0]
         # HomTransforms T_c0_ci for camera i
-        cam_poses = [T_ci_w.inverse() * T_c0_w for T_ci_w in cam_poses]
+        cam_poses = [
+            T_cami_to_world.inverse() * T_cam0_to_world
+            for T_cami_to_world in cam_poses
+        ]
 
         # Generate initial guess
         initial_position = self.generate_initial_guess(cam_poses[-1],
                                                        measurements[0],
                                                        measurements[-1])
         if initial_position[2] == 0:
-            raise ValueError
+            raise ValueError()
         solution = np.array([*initial_position[:2], 1.0]) / initial_position[2]
 
         # Apply Levenberg-Marquart method to solve for the 3d position.
@@ -290,12 +294,14 @@ class Feature(object):
         is_valid_solution = True
         for pose in cam_poses:
             position = pose.R @ final_position + pose.t
-            if position[2] <= 0:
+            dist = np.linalg.norm(final_position - pose.t)
+            # reject if the feature is behind a camera or too far away
+            if position[2] <= 0 or dist > MAX_FEATURE_DISTANCE:
                 is_valid_solution = False
                 break
 
         # Convert the feature position to the world frame.
-        self.position = T_c0_w.R @ final_position + T_c0_w.t
+        self.position = T_cam0_to_world.R @ final_position + T_cam0_to_world.t
 
         self.is_initialized = is_valid_solution
         return is_valid_solution

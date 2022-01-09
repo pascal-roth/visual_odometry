@@ -6,7 +6,6 @@ from utils.loadData import Dataset, DatasetLoader, DatasetType, DataPublisher
 from utils.message import IMUData, FeatureData, FrameData
 from threading import Thread
 import logging
-from vispy import app
 
 from vio_pipeline.msckf import MSCKF
 from vio_pipeline.image_processor import ImageProcessor
@@ -30,9 +29,8 @@ class VIO:
         self.img_queue: Queue[FrameData] = img_queue
         # keep feature queue small, since it's consumer is much slower than the producer
         self.feature_queue: Queue[FeatureData] = Queue(maxsize=2)
-        self.image_processor = ImageProcessor(dataset.K, dataset.R_CAM_IMU,
-                                              dataset.T_CAM_IMU)
-        self.msckf = MSCKF(dataset.R_CAM_IMU)
+        self.image_processor = ImageProcessor(dataset.K, dataset.T_cam_imu)
+        self.msckf = MSCKF(dataset.T_cam_imu, dataset.T_body_imu)
         self.viewer = viewer
         # IMPORTANT: !!! Any parameters accessed by any of the threads
         # has to be declared before this point !!!
@@ -40,7 +38,7 @@ class VIO:
         self.img_thread = Thread(target=self.process_img, name="Image Thread")
         self.imu_thread = Thread(target=self.process_imu, name="IMU Thread")
         self.feature_thread = Thread(target=self.process_feature,
-                                     name="Feature Thead")
+                                     name="Feature Thread")
         self.img_thread.start()
         self.imu_thread.start()
         self.feature_thread.start()
@@ -55,23 +53,22 @@ class VIO:
                 return
 
             feature_msg = self.image_processor.mono_callback(curr_frame)
-            if feature_msg is not None:
-                self.feature_queue.put(feature_msg)
+            if feature_msg is None:
+                continue
+            self.feature_queue.put(feature_msg)
             if self.viewer is not None:
                 self.viewer.update_image(curr_frame.image)
+                self.viewer.update_features(feature_msg)
 
     def process_imu(self):
         print("Started imu processing thread")
         while True:
-            try:
-                curr_imu = self.imu_queue.get()
-                if curr_imu is None:
-                    return
+            curr_imu = self.imu_queue.get()
+            if curr_imu is None:
+                return
 
-                self.image_processor.imu_callback(curr_imu)
-                self.msckf.imu_callback(curr_imu)
-            except StopIteration:
-                break
+            self.image_processor.imu_callback(curr_imu)
+            self.msckf.imu_callback(curr_imu)
 
     def process_feature(self):
         print("Started feature processing thread")
@@ -81,10 +78,13 @@ class VIO:
                 return
 
             # print(f"Feature Message: {feature_msg.timestamp}")
-            result = self.msckf.feature_callback(feature_msg)
+            pose, landmark = self.msckf.feature_callback(feature_msg)
 
-            if result is not None and self.viewer is not None:
-                self.viewer.update_pose(result.cam0_pose)
+            if self.viewer is not None:
+                if pose is not None:
+                    self.viewer.update_pose(pose.cam_pose)
+                if landmark is not None:
+                    self.viewer.update_landmarks(landmark)
 
 
 if __name__ == "__main__":
@@ -103,10 +103,9 @@ if __name__ == "__main__":
     frame_publisher.start()
     img_publisher.start()
 
-    # create viewer on main thread, since otherwise vispy does not work
+
+    # create viewer on main thread, since otherwise matplotlib
     viewer = Viewer()
-
     vio = VIO(frame_queue, imu_queue, dataset, viewer)
-
-    if sys.flags.interactive == 0:
-        app.run()
+    viewer.plot_landmarks()
+    

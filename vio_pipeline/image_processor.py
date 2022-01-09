@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from params import *
 from utils.message import FeatureData
+from utils.transform import HomTransform
 
 from vio_pipeline.featureExtraction import FeatureExtractor
 from vio_pipeline.poseEstimation import PoseEstimation
@@ -18,8 +19,8 @@ class ImageProcessor(object):
     """
     Detect and track features in image sequences.
     """
-    def __init__(self, calibration_mat: np.ndarray, R_CAM_IMU: np.ndarray,
-                 T_CAM_IMU: np.ndarray):
+    def __init__(self, calibration_mat: np.ndarray,
+                 T_imu_to_cam: HomTransform):
         # Indicate if this is the first image message.
         self.is_first_img = True
 
@@ -47,8 +48,8 @@ class ImageProcessor(object):
         # Camera calibration parameters
         self.K = calibration_mat  # vec4
 
+        self.T_imu_to_cam = T_imu_to_cam
         # Take a vector from cam0 frame to the IMU frame.
-        self.R_CAM_IMU = R_CAM_IMU
 
     def mono_callback(self, curr_frame):
         """
@@ -93,6 +94,7 @@ class ImageProcessor(object):
 
         # Detect new features on the frist image.
         new_features = self.detector.detect(img)
+        # new_features,_ = self.detector.get_kp(img)
 
         # Find the stereo matched points for the newly detected features.
         kpts = [kp.pt for kp in new_features]
@@ -167,8 +169,8 @@ class ImageProcessor(object):
         (h, w) = img.shape
         pts_x = curr_kpts[:, 0]
         pts_y = curr_kpts[:, 1]
-        track_inliers = track_inliers.ravel().astype(bool) & (0 <= pts_x) & (pts_x < w) & (
-            0 <= pts_y) & (pts_y < h)
+        track_inliers = track_inliers.ravel().astype(bool) & (0 <= pts_x) & (
+            pts_x < w) & (0 <= pts_y) & (pts_y < h)
 
         # Collect the tracked points.
         prev_tracked_ids = np.array(prev_ids)[track_inliers]
@@ -294,7 +296,6 @@ class ImageProcessor(object):
                                u=curr_kpts[i][0],
                                v=curr_kpts[i][1]) for i in range(len(curr_ids))
         ]
-        print(self.num_features)
         return FeatureData(self.curr_frame.timestamp, features)
 
     def integrate_imu_data(self):
@@ -334,17 +335,17 @@ class ImageProcessor(object):
 
         # Transform the mean angular velocity from the IMU frame to the
         # cam0 and cam1 frames.
-        cam0_mean_ang_vel = self.R_CAM_IMU.T @ mean_ang_vel
+        cam0_mean_ang_vel = self.T_imu_to_cam.R @ mean_ang_vel
         # cam1_mean_ang_vel = self.R_cam1_imu.T @ mean_ang_vel
 
         # Compute the relative rotation.
         dt = self.curr_frame.timestamp - self.prev_frame.timestamp
-        cam0_R_p_c = cv2.Rodrigues(cam0_mean_ang_vel * dt)[0].T
+        R_prevcam0_to_cam0 = cv2.Rodrigues(cam0_mean_ang_vel * dt)[0].T
         # cam1_R_p_c = cv2.Rodrigues(cam1_mean_ang_vel * dt)[0].T
 
         # Delete the useless and used imu messages.
         self.imu_buffer = self.imu_buffer[idx_end:]
-        return cam0_R_p_c
+        return R_prevcam0_to_cam0
 
     def rescale_points(self, pts1, pts2):
         """

@@ -1,81 +1,19 @@
-import numpy as np
+import pprint
+import time
+import warnings
 from copy import copy
 from typing import Dict, List, Tuple
-import warnings
-import pprint
 
-from numpy.lib.function_base import cov
+import numpy as np
 from params import *
 from scipy.stats import chi2
-from utils.quaternion import Quaternion
-from utils.message import IMUData, FeatureData, PoseData
 from utils.matrix import skew
-
-import time
-
+from utils.message import FeatureData, IMUData, LandmarkData, PoseData
+from utils.quaternion import Quaternion
+from utils.states import CameraState, IMUState
 from utils.transform import HomTransform
+
 from vio_pipeline.feature import Feature
-
-
-class IMUState:
-    """
-    Stores the state estimate of the IMU at a time step. 
-    """
-    # id for the next IMUState
-    next_id = 0
-    # gravity in world frame (class level)
-    gravity = np.array([0, 0, -9.81])
-    # Transformation from IMU frame to body frame
-    # z-axis of the body frame should point upwards
-    T_body_imu = HomTransform.identity()
-
-    def __init__(self, id=None):
-        self.id = id
-        # time when state was recorded
-        self.timestamp: time.time = None
-
-        # Orientation from world frame to IMU frame
-        self.orientation = Quaternion.identity()
-        # position of the IMU frame in world frame
-        self.position = np.zeros(3)
-        # velocity of the IMU in world frame
-        self.velocity = np.zeros(3)
-
-        # Biases for angular velocity
-        self.gyro_bias = np.zeros(3)
-        # Biases for acceleration
-        self.acc_bias = np.zeros(3)
-
-        # Modifyers for the observability matrix to have a proper
-        # null-space
-        self.orientation_null = Quaternion.identity()
-        self.position_null = np.zeros(3)
-        self.velocity_null = np.zeros(3)
-
-        # # Transformation between the IMU and the camera
-        self.R_cam_imu = np.eye(3)
-        self.t_imu_cam = np.zeros(3)
-
-
-class CameraState:
-    def __init__(self, id: int, timestamp: float, orientation: Quaternion,
-                 position: np.ndarray, orientation_null: Quaternion,
-                 position_null: np.ndarray) -> None:
-        self.id = id
-        self.timestamp: float = timestamp
-
-        # Orientation from world frame to camera frame
-        self.orientation = orientation
-        # Position of the camera frame in world frame
-        self.position = position
-
-        # These two variables should have the same physical
-        # interpretation with `orientation` and `position`.
-        # There two variables are used to modify the measurement
-        # Jacobian matrices to make the observability matrix
-        # have proper null space.
-        self.orientation_null = orientation_null
-        self.position_null = position_null
 
 
 class StateServer:
@@ -113,7 +51,8 @@ class StateServer:
 
 
 class MSCKF:
-    def __init__(self, R_CAM_IMU) -> None:
+    def __init__(self, T_imu_to_cam: HomTransform,
+                 T_imu_to_body: HomTransform) -> None:
         self.optimization_config = OptimizationParams()
 
         # IMU data buffer
@@ -132,9 +71,10 @@ class MSCKF:
 
         # Set initial IMU state
         imu_state = IMUState()
-        # TODO add transform from IMU to camera  # INFO: not sure if thats the correct transformation
-        imu_state.R_cam_imu = R_CAM_IMU
-        # TODO add transform from IMU to body frame
+        imu_state.R_imu_to_cam = T_imu_to_cam.R
+        imu_state.t_imu_to_cam = T_imu_to_cam.t
+        imu_state.T_imu_to_body = T_imu_to_body
+
         self.state_server = StateServer(imu_state=imu_state)
         self.state_server.reset_state_cov()
         self.state_server.reset_noise_cov()
@@ -179,15 +119,18 @@ class MSCKF:
         # is consistent with the inertial frame
         gravity_norm = np.linalg.norm(gravity_imu)
         IMUState.gravity = np.array([0, 0, -gravity_norm])
-        self.state_server.imu_state.orientation = Quaternion.from_two_vectors(
+        self.state_server.imu_state.orientation_world_to_imu = Quaternion.from_two_vectors(
             -IMUState.gravity, gravity_imu)
+        # self.state_server.imu_state.orientation = Quaternion.from_rotation(np.eye(3))
         print(f"Initialized gravity vector: {IMUState.gravity},")
         print(
-            f"initial orientation: {self.state_server.imu_state.orientation}")
+            f"initial orientation: {self.state_server.imu_state.orientation_world_to_imu}"
+        )
 
-    def feature_callback(self, feature_msg: FeatureData) -> PoseData:
+    def feature_callback(
+            self, feature_msg: FeatureData) -> Tuple[PoseData, LandmarkData]:
         if not self.is_gravity_set:
-            return
+            return None, None
         start_time = time.time()
 
         # Start the system if the first image has been received.
@@ -229,14 +172,18 @@ class MSCKF:
             #     f"---msckf elapsed:          {time.time() - start_time:.2f}s, delta_t: {feature_msg.timestamp - self.start_time:.2f}s"
             # )
             # print()
+
             # Publish the odometry data
-            return self.publish(feature_msg.timestamp)
+            return self.publish_pose(
+                feature_msg.timestamp), self.publish_landmarks(
+                    feature_msg.timestamp)
         except RuntimeError as e:
             print(e)
             self.online_reset(force=True)
         finally:
             # Reset the system if necessary
             self.online_reset()
+        return None, None
 
     def batch_imu_processing(self, time_bound: float) -> None:
         """Propagate the EKF state
@@ -280,7 +227,7 @@ class MSCKF:
         F = np.zeros((21, 21))
         G = np.zeros((21, 12))
 
-        R_imu_world = imu_state.orientation.to_rotation()
+        R_imu_world = imu_state.orientation_world_to_imu.to_rotation()
 
         F[:3, :3] = -skew(gyro)
         F[:3, 3:6] = -np.identity(3)
@@ -303,7 +250,7 @@ class MSCKF:
 
         # Modify the transition matrix
         R_kk_1 = imu_state.orientation_null.to_rotation()
-        Phi[:3, :3] = imu_state.orientation.to_rotation() @ R_kk_1
+        Phi[:3, :3] = imu_state.orientation_world_to_imu.to_rotation() @ R_kk_1
 
         u = R_kk_1 @ IMUState.gravity
         s = u / (u @ u)
@@ -334,7 +281,7 @@ class MSCKF:
                                        self.state_server.state_cov.T) / 2.
 
         # Update the state correspondences to null space.
-        self.state_server.imu_state.orientation_null = imu_state.orientation
+        self.state_server.imu_state.orientation_null = imu_state.orientation_world_to_imu
         self.state_server.imu_state.position_null = imu_state.position
         self.state_server.imu_state.velocity_null = imu_state.velocity
 
@@ -361,7 +308,7 @@ class MSCKF:
         Omega[:3, 3] = gyro
         Omega[3, :3] = -gyro
 
-        q = self.state_server.imu_state.orientation
+        q = self.state_server.imu_state.orientation_world_to_imu
         v = self.state_server.imu_state.velocity
         p = self.state_server.imu_state.position
 
@@ -407,7 +354,7 @@ class MSCKF:
         v = v + (k1_v_dot + 2 * k2_v_dot + 2 * k3_v_dot + k4_v_dot) * dt / 6.
         p = p + (k1_p_dot + 2 * k2_p_dot + 2 * k3_p_dot + k4_p_dot) * dt / 6.
 
-        self.state_server.imu_state.orientation = q
+        self.state_server.imu_state.orientation_world_to_imu = q
         self.state_server.imu_state.velocity = v
         self.state_server.imu_state.position = p
 
@@ -418,20 +365,20 @@ class MSCKF:
             time (float): [description]
         """
         imu_state = self.state_server.imu_state
-        R_cam_imu = imu_state.R_cam_imu
-        t_imu_cam = imu_state.t_imu_cam
+        R_imu_to_cam = imu_state.R_imu_to_cam
+        t_imu_to_cam = imu_state.t_imu_to_cam
 
         # Add a new state to the state server
-        R_imu_world = imu_state.orientation.to_rotation()
-        R_cam_world = R_cam_imu @ R_imu_world
-        t_world_cam = imu_state.position + R_imu_world.T @ t_imu_cam
+        R_world_to_imu = imu_state.orientation_world_to_imu.to_rotation()
+        R_world_to_cam = R_imu_to_cam @ R_world_to_imu
+        t_world_cam = imu_state.position + R_world_to_imu.T @ t_imu_to_cam
 
         cam_state = CameraState(
             id=imu_state.id,
             timestamp=time,
-            orientation=Quaternion.from_rotation(R_cam_world),
+            orientation=Quaternion.from_rotation(R_world_to_cam),
             position=t_world_cam,
-            orientation_null=Quaternion.from_rotation(R_cam_world),
+            orientation_null=Quaternion.from_rotation(R_world_to_cam),
             position_null=t_world_cam)
         self.state_server.cam_states[imu_state.id] = cam_state
 
@@ -439,9 +386,9 @@ class MSCKF:
         # To simplify computation, the matrix J below is the nontrivial block
         # in Equation (16) of "MSCKF" paper.
         J = np.zeros((6, 21))
-        J[:3, :3] = R_cam_world
+        J[:3, :3] = R_world_to_cam
         J[:3, 15:18] = np.identity(3)
-        J[3:6, :3] = skew(R_imu_world.T @ t_imu_cam)
+        J[3:6, :3] = skew(R_world_to_imu.T @ t_imu_to_cam)
         J[3:6, 12:15] = np.identity(3)
         J[3:6, 18:21] = np.identity(3)
 
@@ -492,7 +439,7 @@ class MSCKF:
         feature = self.map_server[feature_id]
 
         # Cam0 pose.
-        R_w_c0 = cam_state.orientation.to_rotation()
+        R_w_c0 = cam_state.orientation_world_to_cam.to_rotation()
         t_c0_w = cam_state.position
 
         # Cam1 pose.
@@ -635,31 +582,31 @@ class MSCKF:
         delta_pos = delta_x_imu[12:15]
         norm_delta_vel = np.linalg.norm(delta_vel)
         norm_delta_pos = np.linalg.norm(delta_pos)
-        print(norm_delta_pos)
         if norm_delta_vel > VELOCITY_DELTA_THRESHOLD or norm_delta_pos > POSITION_DELTA_THRESHOLD:
-            warnings.warn(
+            raise RuntimeError(
                 f"Update change is too large: ||delta_vel|| = {norm_delta_vel}, "
                 f"||delta_pos|| = {norm_delta_pos}, "
                 f"small angle quaternion approximation will be inaccurate")
 
         dq_imu = Quaternion.small_angle_quaternion(delta_x_imu[:3])
         imu_state = self.state_server.imu_state
-        imu_state.orientation = dq_imu * imu_state.orientation
+        imu_state.orientation_world_to_imu = dq_imu * imu_state.orientation_world_to_imu
         imu_state.gyro_bias += delta_x_imu[3:6]
         imu_state.velocity += delta_x_imu[6:9]
         imu_state.acc_bias += delta_x_imu[9:12]
         imu_state.position += delta_x_imu[12:15]
 
         dq_extrinsic = Quaternion.small_angle_quaternion(delta_x_imu[15:18])
-        imu_state.R_cam_imu = dq_extrinsic.to_rotation() @ imu_state.R_cam_imu
-        imu_state.t_imu_cam += delta_x_imu[18:21]
+        imu_state.R_imu_to_cam = dq_extrinsic.to_rotation(
+        ) @ imu_state.R_imu_to_cam
+        imu_state.t_imu_to_cam += delta_x_imu[18:21]
 
         # Update the camera states.
         for i, (cam_id,
                 cam_state) in enumerate(self.state_server.cam_states.items()):
             delta_x_cam = delta_x[21 + i * 6:27 + i * 6]
             dq_cam = Quaternion.small_angle_quaternion(delta_x_cam[:3])
-            cam_state.orientation = dq_cam * cam_state.orientation
+            cam_state.orientation_world_to_cam = dq_cam * cam_state.orientation_world_to_cam
             cam_state.position += delta_x_cam[3:]
 
         # Update state covariance.
@@ -670,18 +617,15 @@ class MSCKF:
 
         # Fix the covariance to be symmetric
         self.state_server.state_cov = (state_cov + state_cov.T) / 2.
+        print(
+            f"Updated IMU_state, delta position: {norm_delta_pos}, delta velocity:{norm_delta_vel}"
+        )
 
     def gating_test(self, H: np.ndarray, r: np.ndarray, dof: int) -> bool:
-        # try:
         P1 = H @ self.state_server.state_cov @ H.T
         P2 = OBSERVATION_NOISE * np.identity(H.shape[0])
         gamma = r @ np.linalg.solve(P1 + P2, r)
-        gamma = np.abs(gamma)
-        threshold = self.chi_squared_test_table[dof]
-        # print(f"{gamma < threshold} gamma: {gamma} < chi2: {threshold}, {dof}")
-        return gamma < threshold
-        # except ValueError:
-        #     return False
+        return gamma < self.chi_squared_test_table[dof]
 
     def remove_lost_features(self) -> None:
         # Remove the features that lost track.
@@ -689,7 +633,8 @@ class MSCKF:
         jacobian_row_size = 0
         invalid_feature_ids = []
         processed_feature_ids = []
-
+        valid_pos_n = 0
+        invalid_pos = 0
         for feature in self.map_server.values():
             # Pass the features that are still being tracked.
             if self.state_server.imu_state.id in feature.observations:
@@ -710,11 +655,16 @@ class MSCKF:
                 valid_pos = feature.initialize_position(
                     self.state_server.cam_states)
                 if not valid_pos:
+                    invalid_pos += 1
                     invalid_feature_ids.append(feature.id)
                     continue
+                else:
+                    valid_pos_n += 1
+
             jacobian_row_size += 4 * len(feature.observations) - 3
             processed_feature_ids.append(feature.id)
 
+        print(f"invalid pos: {invalid_pos}, valid pos: {valid_pos_n}")
         # Remove the features that do not have enough measurements.
         for feature_id in invalid_feature_ids:
             del self.map_server[feature_id]
@@ -755,8 +705,10 @@ class MSCKF:
 
         H_x = H_x[:stack_count]
         r = r[:stack_count]
-        
-        print(f"num lost features: {len(processed_feature_ids)}, num invalid features: {len(invalid_feature_ids)}, stack count: {stack_count}")
+
+        print(
+            f"num lost features: {len(processed_feature_ids)}, num invalid features: {len(invalid_feature_ids)}, stack count: {stack_count}"
+        )
 
         # Perform the measurement update step.
         self.measurement_update(H_x, r)
@@ -776,7 +728,7 @@ class MSCKF:
         # Pose of the key camera state.
         key_position = cam_state_pairs[key_cam_state_idx][1].position
         key_rotation = cam_state_pairs[key_cam_state_idx][
-            1].orientation.to_rotation()
+            1].orientation_world_to_cam.to_rotation()
 
         rm_cam_state_ids = []
 
@@ -785,7 +737,7 @@ class MSCKF:
         for i in range(2):
             position = cam_state_pairs[cam_state_idx][1].position
             rotation = cam_state_pairs[cam_state_idx][
-                1].orientation.to_rotation()
+                1].orientation_world_to_cam.to_rotation()
 
             distance = np.linalg.norm(position - key_position)
             angle = 2 * np.arccos(
@@ -970,7 +922,7 @@ class MSCKF:
         # Reset the state covariance.
         self.state_server.reset_state_cov()
 
-    def publish(self, time: float) -> PoseData:
+    def publish_pose(self, time: float) -> PoseData:
         imu_state = self.state_server.imu_state
         # print('+++publish:')
         # print('   timestamp:', imu_state.timestamp)
@@ -979,13 +931,22 @@ class MSCKF:
         # print('   velocity:', imu_state.velocity)
         # print()
 
-        T_i_w = HomTransform(imu_state.orientation.to_rotation().T,
-                             imu_state.position)
-        T_b_w = IMUState.T_body_imu * T_i_w * IMUState.T_body_imu.inverse()
-        body_velocity = IMUState.T_body_imu.R @ imu_state.velocity
+        T_imu_to_world = HomTransform(
+            imu_state.orientation_world_to_imu.to_rotation().T,
+            imu_state.position)
+        T_body_to_world = IMUState.T_imu_to_body * T_imu_to_world * IMUState.T_imu_to_body.inverse(
+        )
+        body_velocity = IMUState.T_imu_to_body.R @ imu_state.velocity
 
-        R_w_c = imu_state.R_cam_imu @ T_i_w.R.T
-        t_c_w = imu_state.position + T_i_w.R @ imu_state.t_imu_cam
-        T_c_w = HomTransform(R_w_c.T, t_c_w)
+        R_world_to_cam = imu_state.R_imu_to_cam @ T_imu_to_world.R.T
+        t_cam_to_world = imu_state.position + T_imu_to_world.R @ imu_state.t_imu_to_cam
+        T_cam_to_world = HomTransform(R_world_to_cam.T, t_cam_to_world)
 
-        return PoseData(time, T_b_w, body_velocity, T_c_w)
+        return PoseData(time, T_body_to_world, body_velocity, T_cam_to_world)
+
+    def publish_landmarks(self, time: float) -> LandmarkData:
+        landmarks = [
+            feature.position for feature in self.map_server.values()
+            if feature.is_initialized
+        ]
+        return LandmarkData(time, np.asarray(landmarks))
